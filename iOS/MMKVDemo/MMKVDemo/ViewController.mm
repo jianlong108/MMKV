@@ -54,28 +54,28 @@
 	}
 
 	[self funcionalTest];
-	[self testReKey];
+//	[self testReKey];
 	//[self testImportFromUserDefault];
 	//[self testCornerSize];
 	//[self testFastRemoveCornerSize];
 
-	DemoSwiftUsage *swiftUsageDemo = [[DemoSwiftUsage alloc] init];
-	[swiftUsageDemo testSwiftFunctionality];
-
-	m_loops = 10000;
-	m_arrStrings = [NSMutableArray arrayWithCapacity:m_loops];
-	m_arrStrKeys = [NSMutableArray arrayWithCapacity:m_loops];
-	m_arrIntKeys = [NSMutableArray arrayWithCapacity:m_loops];
-	for (size_t index = 0; index < m_loops; index++) {
-		NSString *str = [NSString stringWithFormat:@"%s-%d", __FILE__, rand()];
-		[m_arrStrings addObject:str];
-
-		NSString *strKey = [NSString stringWithFormat:@"str-%zu", index];
-		[m_arrStrKeys addObject:strKey];
-
-		NSString *intKey = [NSString stringWithFormat:@"int-%zu", index];
-		[m_arrIntKeys addObject:intKey];
-	}
+//	DemoSwiftUsage *swiftUsageDemo = [[DemoSwiftUsage alloc] init];
+//	[swiftUsageDemo testSwiftFunctionality];
+//
+//	m_loops = 10000;
+//	m_arrStrings = [NSMutableArray arrayWithCapacity:m_loops];
+//	m_arrStrKeys = [NSMutableArray arrayWithCapacity:m_loops];
+//	m_arrIntKeys = [NSMutableArray arrayWithCapacity:m_loops];
+//	for (size_t index = 0; index < m_loops; index++) {
+//		NSString *str = [NSString stringWithFormat:@"%s-%d", __FILE__, rand()];
+//		[m_arrStrings addObject:str];
+//
+//		NSString *strKey = [NSString stringWithFormat:@"str-%zu", index];
+//		[m_arrStrKeys addObject:strKey];
+//
+//		NSString *intKey = [NSString stringWithFormat:@"int-%zu", index];
+//		[m_arrIntKeys addObject:intKey];
+//	}
 }
 
 - (void)funcionalTest {

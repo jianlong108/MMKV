@@ -59,7 +59,7 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setMMKVBasePath:(NSString *)basePath;
 
 - (BOOL)reKey:(nullable NSData *)newKey NS_SWIFT_NAME(reset(cryptKey:));
-- (nullable NSData *)cryptKey;
+//- (nullable NSData *)cryptKey;
 
 - (BOOL)setObject:(nullable NSObject<NSCoding> *)object forKey:(NSString *)key NS_SWIFT_NAME(set(_:forKey:));
 

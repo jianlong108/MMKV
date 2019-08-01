@@ -64,15 +64,15 @@ static NSString *encodeMmapID(NSString *mmapID);
 	size_t m_size;
 	size_t m_actualSize;
 	MiniCodedOutputData *m_output;
-	AESCrypt *m_cryptor;
+//	AESCrypt *m_cryptor;
 
 	BOOL m_isInBackground;
 	BOOL m_needLoadFromFile;
 	BOOL m_hasFullWriteBack;
 
 	uint32_t m_crcDigest;
-	int m_crcFd;
-	char *m_crcPtr;
+//	int m_crcFd;
+//	char *m_crcPtr;
 }
 
 #pragma mark - init
@@ -137,9 +137,9 @@ static NSString *encodeMmapID(NSString *mmapID);
 		m_path = path;
 		m_crcPath = [MMKV crcPathWithMappedKVPath:m_path];
 
-		if (cryptKey.length > 0) {
-			m_cryptor = new AESCrypt((const unsigned char *) cryptKey.bytes, cryptKey.length);
-		}
+//		if (cryptKey.length > 0) {
+//			m_cryptor = new AESCrypt((const unsigned char *) cryptKey.bytes, cryptKey.length);
+//		}
 
 		[self loadFromFile];
 
@@ -177,19 +177,19 @@ static NSString *encodeMmapID(NSString *mmapID);
 		delete m_output;
 		m_output = nullptr;
 	}
-	if (m_cryptor) {
-		delete m_cryptor;
-		m_cryptor = nullptr;
-	}
+//	if (m_cryptor) {
+//		delete m_cryptor;
+//		m_cryptor = nullptr;
+//	}
 
-	if (m_crcPtr != nullptr && m_crcPtr != MAP_FAILED) {
-		munmap(m_crcPtr, CRC_FILE_SIZE);
-		m_crcPtr = nullptr;
-	}
-	if (m_crcFd >= 0) {
-		close(m_crcFd);
-		m_crcFd = -1;
-	}
+//	if (m_crcPtr != nullptr && m_crcPtr != MAP_FAILED) {
+//		munmap(m_crcPtr, CRC_FILE_SIZE);
+//		m_crcPtr = nullptr;
+//	}
+//	if (m_crcFd >= 0) {
+//		close(m_crcFd);
+//		m_crcFd = -1;
+//	}
 }
 
 #pragma mark - Application state
@@ -231,7 +231,22 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 	return tmp;
 }
 
+
 - (void)loadFromFile {
+    /**
+     O_RDONLY 以只读方式打开文件
+     O_WRONLY 以只写方式打开文件
+     O_RDWR 以可读写方式打开文件. 上述三种旗标是互斥的, 也就是不可同时使用, 但可与下列的旗标利用OR(|)运算符组合.
+
+     O_CREAT 若欲打开的文件不存在则自动建立该文件.
+     
+     S_IRWXU00700 权限, 代表该文件所有者具有可读、可写及可执行的权限.
+     S_IRUSR 或S_IREAD, 00400 权限, 代表该文件所有者具有可读取的权限.
+     S_IWUSR 或S_IWRITE, 00200 权限, 代表该文件所有者具有可写入的权限.
+     S_IXUSR 或S_IEXEC, 00100 权限, 代表该文件所有者具有可执行的权限.
+      int open(const char * pathname, int flags, mode_t mode);
+     
+     */
 	m_fd = open(m_path.UTF8String, O_RDWR, S_IRWXU);
 	if (m_fd < 0) {
 		MMKVError(@"fail to open:%@, %s", m_path, strerror(errno));
@@ -244,12 +259,44 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 		// round up to (n * pagesize)
 		if (m_size < DEFAULT_MMAP_SIZE || (m_size % DEFAULT_MMAP_SIZE != 0)) {
 			m_size = ((m_size / DEFAULT_MMAP_SIZE) + 1) * DEFAULT_MMAP_SIZE;
+            /**
+             ftruncate()会将参数fd指定的文件大小改为参数length指定的大小。参数fd为已打开的文件描述词，而且必须是以写入模式打开的文件。如果原来的文件大小比参数length大，则超过的部分会被删去
+             
+             返 回  值：0、-1
+             */
 			if (ftruncate(m_fd, m_size) != 0) {
 				MMKVError(@"fail to truncate [%@] to size %zu, %s", m_mmapID, m_size, strerror(errno));
 				m_size = (size_t) st.st_size;
 				return;
 			}
 		}
+        /**
+         void * mmap (void *addr,
+                      size_t len,
+                      int prot,
+                      int flags,
+                      int fd,
+                      off_t offset);
+         addr：映射区的开始地址，设置为0时表示由系统决定映射区的起始地址。
+         leng：映射区的长度。//长度单位是 以字节为单位，不足一内存页按一内存页处理
+         prot：期望的内存保护标志，不能与文件的打开模式冲突。是以下的某个值，可以通过|运算合理地组合在一起
+         PROT_EXEC //页内容可以被执行
+         PROT_READ //页内容可以被读取
+         PROT_WRITE //页可以被写入
+         PROT_NONE //页不可访问
+         flags：指定映射对象的类型，映射选项和映射页是否可以共享。它的值可以是一个或者多个以下位的组合体
+         fd：有效的文件描述词。一般是由open()函数返回，其值也可以设置为-1，此时需要指定flags参数中的MAP_ANON,表明进行的是匿名映射。
+         
+         offset：被映射对象内容的起点。
+
+         这里的参数我们要重点关注3个length、prot、flags。
+         length代表了我们可以操作的内存大小；
+         prot代表我们对文件的操作权限。这里传入了读写权限，而且注意要与open()保持一致，所以open()函数传入了O_RDWR可读写权限；。
+         flags要写MAP_FILE|MAP_SHARED,我一开始只写了MAP_FILE,能读，但是不能写。
+         
+         返回值 m_ptr 就是虚拟内存中的地址
+         如果失败，mmap 函数将返回 MAP_FAILED。
+         */
 		m_ptr = (char *) mmap(nullptr, m_size, PROT_READ | PROT_WRITE, MAP_SHARED, m_fd, 0);
 		if (m_ptr == MAP_FAILED) {
 			MMKVError(@"fail to mmap [%@], %s", m_mmapID, strerror(errno));
@@ -291,9 +338,9 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 				}
 				if (loadFromFile) {
 					NSData *inputBuffer = [NSData dataWithBytesNoCopy:m_ptr + offset length:m_actualSize freeWhenDone:NO];
-					if (m_cryptor) {
-						inputBuffer = decryptBuffer(*m_cryptor, inputBuffer);
-					}
+//					if (m_cryptor) {
+//						inputBuffer = decryptBuffer(*m_cryptor, inputBuffer);
+//					}
 					m_dic = [MiniPBCoder decodeContainerOfClass:NSMutableDictionary.class withValueClass:NSData.class fromData:inputBuffer];
 					m_output = new MiniCodedOutputData(m_ptr + offset + m_actualSize, m_size - offset - m_actualSize);
 					if (needFullWriteback) {
@@ -385,9 +432,9 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 	m_actualSize = 0;
 	m_crcDigest = 0;
 
-	if (m_cryptor) {
-		m_cryptor->reset();
-	}
+//	if (m_cryptor) {
+//		m_cryptor->reset();
+//	}
 
 	[self loadFromFile];
 }
@@ -425,9 +472,9 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 	m_size = 0;
 	m_actualSize = 0;
 
-	if (m_cryptor) {
-		m_cryptor->reset();
-	}
+//	if (m_cryptor) {
+//		m_cryptor->reset();
+//	}
 }
 
 - (void)close {
@@ -577,11 +624,11 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 			m_output->seek(m_actualSize);
 		}
 
-		if (m_cryptor) {
-			m_cryptor->reset();
-			auto ptr = (unsigned char *) data.bytes;
-			m_cryptor->encrypt(ptr, ptr, data.length);
-		}
+//		if (m_cryptor) {
+//			m_cryptor->reset();
+//			auto ptr = (unsigned char *) data.bytes;
+//			m_cryptor->encrypt(ptr, ptr, data.length);
+//		}
 
 		if ([self writeActualSize:data.length] == NO) {
 			return NO;
@@ -611,6 +658,12 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 
 	if (m_isInBackground) {
 		tmpPtr = m_ptr;
+        /**
+         mlock机制主要有以下功能：
+         a)被锁定的物理内存在被解锁或进程退出前，不会被页回收流程处理。
+         b)被锁定的物理内存，不会被交换到swap设备。
+         c)进程执行mlock操作时，内核会立刻分配物理内存（注意COW的情况）
+         */
 		if (mlock(tmpPtr, offset) != 0) {
 			MMKVError(@"fail to mmap [%@], %d:%s", m_mmapID, errno, strerror(errno));
 			// just fail on this condition, otherwise app will crash anyway
@@ -668,9 +721,9 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 		if (ret) {
 			static const int offset = pbFixed32Size(0);
 			auto ptr = (uint8_t *) m_ptr + offset + m_actualSize - size;
-			if (m_cryptor) {
-				m_cryptor->encrypt(ptr, ptr, size);
-			}
+//			if (m_cryptor) {
+//				m_cryptor->encrypt(ptr, ptr, size);
+//			}
 			[self updateCRCDigest:ptr withSize:size];
 		}
 	}
@@ -679,6 +732,7 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 
 - (NSData *)getRawDataForKey:(NSString *)key {
 	CScopedLock lock(m_lock);
+    //先试图去加载文件,获得m_dic,在通过m_dic获得对应的数据
 	[self checkLoadData];
 	return [m_dic objectForKey:key];
 }
@@ -705,11 +759,11 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 	if (allData.length > 0) {
 		int offset = pbFixed32Size(0);
 		if (allData.length + offset <= m_size) {
-			if (m_cryptor) {
-				m_cryptor->reset();
-				auto ptr = (unsigned char *) allData.bytes;
-				m_cryptor->encrypt(ptr, ptr, allData.length);
-			}
+//			if (m_cryptor) {
+//				m_cryptor->reset();
+//				auto ptr = (unsigned char *) allData.bytes;
+//				m_cryptor->encrypt(ptr, ptr, allData.length);
+//			}
 			BOOL ret = [self writeActualSize:allData.length];
 			if (ret) {
 				delete m_output;
@@ -776,115 +830,116 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 }
 
 - (void)updateCRCDigest:(const uint8_t *)ptr withSize:(size_t)length {
-	if (ptr == nullptr) {
-		return;
-	}
-	m_crcDigest = (uint32_t) crc32(m_crcDigest, ptr, (uint32_t) length);
+//	if (ptr == nullptr) {
+//		return;
+//	}
+//	m_crcDigest = (uint32_t) crc32(m_crcDigest, ptr, (uint32_t) length);
 
-	if (m_crcPtr == nullptr || m_crcPtr == MAP_FAILED) {
-		[self prepareCRCFile];
-	}
-	if (m_crcPtr == nullptr || m_crcPtr == MAP_FAILED) {
-		return;
-	}
+//	if (m_crcPtr == nullptr || m_crcPtr == MAP_FAILED) {
+//		[self prepareCRCFile];
+//	}
+//	if (m_crcPtr == nullptr || m_crcPtr == MAP_FAILED) {
+//		return;
+//	}
 
-	static const size_t bufferLength = pbFixed32Size(0);
-	if (m_isInBackground) {
-		if (mlock(m_crcPtr, bufferLength) != 0) {
-			MMKVError(@"fail to mlock crc [%@]-%p, %d:%s", m_mmapID, m_crcPtr, errno, strerror(errno));
-			// just fail on this condition, otherwise app will crash anyway
-			return;
-		}
-	}
+//	static const size_t bufferLength = pbFixed32Size(0);
+//	if (m_isInBackground) {
+//		if (mlock(m_crcPtr, bufferLength) != 0) {
+//			MMKVError(@"fail to mlock crc [%@]-%p, %d:%s", m_mmapID, m_crcPtr, errno, strerror(errno));
+//			// just fail on this condition, otherwise app will crash anyway
+//			return;
+//		}
+//	}
 
-	@try {
-		MiniCodedOutputData output(m_crcPtr, bufferLength);
-		output.writeFixed32((int32_t) m_crcDigest);
-	} @catch (NSException *exception) {
-		MMKVError(@"%@", exception);
-	}
-	if (m_isInBackground) {
-		munlock(m_crcPtr, bufferLength);
-	}
+//	@try {
+//		MiniCodedOutputData output(m_crcPtr, bufferLength);
+//		output.writeFixed32((int32_t) m_crcDigest);
+//	} @catch (NSException *exception) {
+//		MMKVError(@"%@", exception);
+//	}
+//	if (m_isInBackground) {
+//		munlock(m_crcPtr, bufferLength);
+//	}
 }
 
-- (void)prepareCRCFile {
-	if (m_crcPtr == nullptr || m_crcPtr == MAP_FAILED) {
-		if (!isFileExist(m_crcPath)) {
-			createFile(m_crcPath);
-		}
-		m_crcFd = open(m_crcPath.UTF8String, O_RDWR, S_IRWXU);
-		if (m_crcFd < 0) {
-			MMKVError(@"fail to open:%@, %s", m_crcPath, strerror(errno));
-			removeFile(m_crcPath);
-		} else {
-			size_t size = 0;
-			struct stat st = {};
-			if (fstat(m_crcFd, &st) != -1) {
-				size = (size_t) st.st_size;
-			}
-			int fileLegth = CRC_FILE_SIZE;
-			if (size != fileLegth) {
-				size = fileLegth;
-				if (ftruncate(m_crcFd, size) != 0) {
-					MMKVError(@"fail to truncate [%@] to size %zu, %s", m_crcPath, size, strerror(errno));
-					close(m_crcFd);
-					m_crcFd = -1;
-					removeFile(m_crcPath);
-					return;
-				}
-			}
-			m_crcPtr = (char *) mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, m_crcFd, 0);
-			if (m_crcPtr == MAP_FAILED) {
-				MMKVError(@"fail to mmap [%@], %s", m_crcPath, strerror(errno));
-				close(m_crcFd);
-				m_crcFd = -1;
-			}
-		}
-	}
-}
+//- (void)prepareCRCFile {
+//	if (m_crcPtr == nullptr || m_crcPtr == MAP_FAILED) {
+//		if (!isFileExist(m_crcPath)) {
+//			createFile(m_crcPath);
+//		}
+//		m_crcFd = open(m_crcPath.UTF8String, O_RDWR, S_IRWXU);
+//		if (m_crcFd < 0) {
+//			MMKVError(@"fail to open:%@, %s", m_crcPath, strerror(errno));
+//			removeFile(m_crcPath);
+//		} else {
+//			size_t size = 0;
+//			struct stat st = {};
+//			if (fstat(m_crcFd, &st) != -1) {
+//				size = (size_t) st.st_size;
+//			}
+//			int fileLegth = CRC_FILE_SIZE;
+//			if (size != fileLegth) {
+//				size = fileLegth;
+//				if (ftruncate(m_crcFd, size) != 0) {
+//					MMKVError(@"fail to truncate [%@] to size %zu, %s", m_crcPath, size, strerror(errno));
+//					close(m_crcFd);
+//					m_crcFd = -1;
+//					removeFile(m_crcPath);
+//					return;
+//				}
+//			}
+//			m_crcPtr = (char *) mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, m_crcFd, 0);
+//			if (m_crcPtr == MAP_FAILED) {
+//				MMKVError(@"fail to mmap [%@], %s", m_crcPath, strerror(errno));
+//				close(m_crcFd);
+//				m_crcFd = -1;
+//			}
+//		}
+//	}
+//}
 
 #pragma mark - encryption & decryption
 
-- (nullable NSData *)cryptKey {
-	if (m_cryptor) {
-		NSMutableData *data = [NSMutableData dataWithLength:AES_KEY_LEN];
-		m_cryptor->getKey(data.mutableBytes);
-		return data;
-	}
-	return NULL;
-}
+//- (nullable NSData *)cryptKey {
+//	if (m_cryptor) {
+//		NSMutableData *data = [NSMutableData dataWithLength:AES_KEY_LEN];
+//		m_cryptor->getKey(data.mutableBytes);
+//		return data;
+//	}
+//	return NULL;
+//}
 
 - (BOOL)reKey:(NSData *)newKey {
 	CScopedLock lock(m_lock);
 	[self checkLoadData];
 
-	if (m_cryptor) {
-		if (newKey.length > 0) {
-			NSData *oldKey = [self cryptKey];
-			if ([newKey isEqualToData:oldKey]) {
-				return YES;
-			} else {
-				// change encryption key
-				MMKVInfo(@"reKey with new aes key");
-				delete m_cryptor;
-				auto ptr = (const unsigned char *) newKey.bytes;
-				m_cryptor = new AESCrypt(ptr, newKey.length);
-				return [self fullWriteBack];
-			}
-		} else {
-			// decryption to plain text
-			MMKVInfo(@"reKey with no aes key");
-			delete m_cryptor;
-			m_cryptor = nullptr;
-			return [self fullWriteBack];
-		}
-	} else {
+//	if (m_cryptor) {
+//		if (newKey.length > 0) {
+//			NSData *oldKey = [self cryptKey];
+//			if ([newKey isEqualToData:oldKey]) {
+//				return YES;
+//			} else {
+//				// change encryption key
+//				MMKVInfo(@"reKey with new aes key");
+//				delete m_cryptor;
+//				auto ptr = (const unsigned char *) newKey.bytes;
+//				m_cryptor = new AESCrypt(ptr, newKey.length);
+//				return [self fullWriteBack];
+//			}
+//		} else {
+//			// decryption to plain text
+//			MMKVInfo(@"reKey with no aes key");
+//			delete m_cryptor;
+//			m_cryptor = nullptr;
+//			return [self fullWriteBack];
+//		}
+//	} else
+    {
 		if (newKey.length > 0) {
 			// transform plain text to encrypted text
 			MMKVInfo(@"reKey with aes key");
 			auto ptr = (const unsigned char *) newKey.bytes;
-			m_cryptor = new AESCrypt(ptr, newKey.length);
+//			m_cryptor = new AESCrypt(ptr, newKey.length);
 			return [self fullWriteBack];
 		} else {
 			return YES;
@@ -1300,7 +1355,7 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 
 - (void)doSync:(bool)sync {
 	CScopedLock lock(m_lock);
-	if (m_needLoadFromFile || ![self isFileValid] || m_crcPtr == nullptr) {
+	if (m_needLoadFromFile || ![self isFileValid] /*|| m_crcPtr == nullptr*/) {
 		return;
 	}
 
@@ -1308,9 +1363,9 @@ NSData *decryptBuffer(AESCrypt &crypter, NSData *inputBuffer) {
 	if (msync(m_ptr, m_actualSize, flag) != 0) {
 		MMKVError(@"fail to msync[%d] data file of [%@]:%s", flag, m_mmapID, strerror(errno));
 	}
-	if (msync(m_crcPtr, CRC_FILE_SIZE, flag) != 0) {
-		MMKVError(@"fail to msync[%d] crc-32 file of [%@]:%s", flag, m_mmapID, strerror(errno));
-	}
+//	if (msync(m_crcPtr, CRC_FILE_SIZE, flag) != 0) {
+//		MMKVError(@"fail to msync[%d] crc-32 file of [%@]:%s", flag, m_mmapID, strerror(errno));
+//	}
 }
 
 static NSString *g_basePath = nil;
