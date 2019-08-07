@@ -80,7 +80,7 @@ void MiniCodedOutputData::writeString(NSString *value) {
 }
 
 void MiniCodedOutputData::writeData(NSData *value) {
-	this->writeRawVarint32((int32_t) value.length);
+    this->writeRawVarint32((int32_t) value.length);
 	this->writeRawData(value);
 }
 
@@ -149,6 +149,7 @@ void MiniCodedOutputData::writeRawVarint64(int64_t value) {
 	}
 }
 
+//将一个int_32以小端格式写进m_ptr中
 void MiniCodedOutputData::writeRawLittleEndian32(int32_t value) {
 	this->writeRawByte((value) &0xff);
 	this->writeRawByte((value >> 8) & 0xff);

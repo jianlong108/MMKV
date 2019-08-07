@@ -52,8 +52,14 @@
 		NSString *rootDir = [libraryPath stringByAppendingPathComponent:@"mmkv"];
 		[MMKV setMMKVBasePath:rootDir];
 	}
-
-	[self funcionalTest];
+    
+   NSString *path = [libraryPath stringByAppendingPathComponent:@"mmkv_2"];
+    auto mmkv = [MMKV mmkvWithID:@"test/case1" relativePath:path];
+//    [[MMKV defaultMMKV] setString:@"hello mmkv" forKey:@"string"];
+//    [mmkv setString:@"hello mmkv test/case1" forKey:@"string"];
+//    NSLog(@"string:%@", [[MMKV defaultMMKV] getStringForKey:@"string"]);
+    NSLog(@"test/case1:%@", [mmkv getStringForKey:@"string"]);
+//    [self funcionalTest];
 //	[self testReKey];
 	//[self testImportFromUserDefault];
 	//[self testCornerSize];
@@ -84,10 +90,10 @@
 	path = [path stringByAppendingPathComponent:@"mmkv_2"];
 	auto mmkv = [MMKV mmkvWithID:@"test/case1" relativePath:path];
 
-	[mmkv setBool:YES forKey:@"bool"];
+    [mmkv setBool:YES forKey:@"bool"];
 	NSLog(@"bool:%d", [mmkv getBoolForKey:@"bool"]);
 
-	[mmkv setInt32:-1024 forKey:@"int32"];
+    [mmkv setInt32:-1024 forKey:@"int32"];
 	NSLog(@"int32:%d", [mmkv getInt32ForKey:@"int32"]);
 
 	[mmkv setUInt32:std::numeric_limits<uint32_t>::max() forKey:@"uint32"];
