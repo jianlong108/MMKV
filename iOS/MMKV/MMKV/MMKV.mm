@@ -355,7 +355,7 @@ static NSString *encodeMmapID(NSString *mmapID);
 				m_output = new MiniCodedOutputData(m_ptr + offset, m_size - offset);
 				[self recaculateCRCDigest];
 			}
-//            MMKVInfo(@"loaded [%@] with %zu values", m_mmapID, (unsigned long) m_dic.count);
+            NSLog(@"loaded [%@] with %zu values", m_mmapID, (unsigned long) m_arr.count);
 		}
 	}
 	if (m_arr == nil) {
@@ -437,7 +437,18 @@ static NSString *encodeMmapID(NSString *mmapID);
 
 - (BOOL)removeFirstData
 {
-    return YES;
+    if (m_arr.count <= 0) {
+        return NO;
+    }
+    CScopedLock lock(m_lock);
+    [self checkLoadData];
+    
+    [m_arr removeObjectAtIndex:0];
+    m_hasFullWriteBack = NO;
+    
+    //    MMKVInfo(@"remove [%@] %lu keys, %lu remain", m_mmapID, (unsigned long) arrKeys.count, (unsigned long) m_dic.count);
+    
+    return [self fullWriteBack];
 }
 
 - (void)clearAll {
@@ -970,9 +981,9 @@ static NSString *encodeMmapID(NSString *mmapID);
 //	return NULL;
 //}
 
-- (BOOL)reKey:(NSData *)newKey {
-	CScopedLock lock(m_lock);
-	[self checkLoadData];
+//- (BOOL)reKey:(NSData *)newKey {
+//    CScopedLock lock(m_lock);
+//    [self checkLoadData];
 
 //	if (m_cryptor) {
 //		if (newKey.length > 0) {
@@ -995,19 +1006,19 @@ static NSString *encodeMmapID(NSString *mmapID);
 //			return [self fullWriteBack];
 //		}
 //	} else
-    {
-		if (newKey.length > 0) {
-			// transform plain text to encrypted text
-			NSLog(@"reKey with aes key");
-			auto ptr = (const unsigned char *) newKey.bytes;
-//			m_cryptor = new AESCrypt(ptr, newKey.length);
-			return [self fullWriteBack];
-		} else {
-			return YES;
-		}
-	}
-	return NO;
-}
+//    {
+//        if (newKey.length > 0) {
+//            // transform plain text to encrypted text
+//            NSLog(@"reKey with aes key");
+//            auto ptr = (const unsigned char *) newKey.bytes;
+////            m_cryptor = new AESCrypt(ptr, newKey.length);
+//            return [self fullWriteBack];
+//        } else {
+//            return YES;
+//        }
+//    }
+//    return NO;
+//}
 
 #pragma mark - set & get
 
