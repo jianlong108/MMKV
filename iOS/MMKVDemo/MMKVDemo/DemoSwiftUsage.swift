@@ -23,7 +23,7 @@ import Foundation
 
 class DemoSwiftUsage : NSObject {
 	@objc func testSwiftFunctionality() {
-
+/*
         guard let mmkv = MMKV(mmapID: "testSwift") else {
             return
         }
@@ -63,5 +63,6 @@ class DemoSwiftUsage : NSObject {
 
         mmkv.removeValue(forKey: "bool")
         print("Swift: after delete bool = \(mmkv.bool(forKey: "bool"))")
+ */
 	}
 }

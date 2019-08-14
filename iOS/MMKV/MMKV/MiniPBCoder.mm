@@ -166,7 +166,26 @@
 		}];
 
 		encodeItem = &(*m_encodeItems)[index];
-	} else {
+    }
+    else if ([obj isKindOfClass:[NSArray class]]) {
+        encodeItem->type = PBEncodeItemType_NSContainer;
+        encodeItem->value.objectValue = nullptr;
+
+        [(NSArray *) obj enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+
+            size_t valueIndex = [self prepareObjectForEncode:obj];
+            if (valueIndex < self->m_encodeItems->size()) {
+                (*self->m_encodeItems)[index].valueSize += (*self->m_encodeItems)[valueIndex].compiledSize;
+            }
+            else {
+                self->m_encodeItems->pop_back(); // pop key
+            }
+
+        }];
+
+        encodeItem = &(*m_encodeItems)[index];
+    }
+    else {
 		m_encodeItems->pop_back();
 		MMKVError(@"%@ not recognized as container", NSStringFromClass(obj.class));
 		return m_encodeItems->size();
@@ -214,7 +233,25 @@
 }
 
 #pragma mark - decode
-
+- (NSMutableArray *)decodeOneArrayOfValueClass:(Class)cls {
+    if (cls == nullptr) {
+        return nil;
+    }
+    
+    NSMutableArray *arr = [NSMutableArray array];
+    
+    m_inputData->readInt32();
+    
+    while (!m_inputData->isAtEnd()) {
+//        NSString *nsKey = m_inputData->readString();
+//        if (nsKey) {
+            id value = [self decodeOneObject:nil ofClass:cls];
+            [arr addObject:value];
+//        }
+    }
+    
+    return arr;
+}
 - (NSMutableDictionary *)decodeOneDictionaryOfValueClass:(Class)cls {
 	if (cls == nullptr) {
 		return nil;
@@ -289,7 +326,9 @@
 		MiniPBCoder *oCoder = [[MiniPBCoder alloc] initForReadingWithData:oData];
 		if (cls == [NSMutableDictionary class] || cls == [NSDictionary class]) {
 			obj = [oCoder decodeOneDictionaryOfValueClass:valueClass];
-		} else {
+        } else if (cls == [NSMutableArray class] || cls == [NSArray class]) {
+            obj = [oCoder decodeOneArrayOfValueClass:valueClass];
+        } else {
 			MMKVError(@"%@ not recognized as container", NSStringFromClass(cls));
 		}
 	} @catch (NSException *exception) {

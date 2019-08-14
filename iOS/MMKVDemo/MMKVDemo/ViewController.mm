@@ -32,18 +32,35 @@
 
 	int m_loops;
 }
+static MMKV *mm;
+- (void)addOneData
+{
+    static int num = 0;
+    NSData *data = [[NSString stringWithFormat:@"hello World hello Worldhello Worldhello Worldhello World hello Worldhello Worldhello Worldhello World hello Worldhello Worldhello Worldhello World hello Worldhello Worldhello World%d",num] dataUsingEncoding:NSUTF8StringEncoding];
+    NSLog(@"%lu",data.length);
+    [mm appendData:data];
+    num ++;
+    NSLog(@"mm的size %lu %lu",mm.totalSize,mm.actualSize);
+    [mm sync];
+}
+
+- (void)getAllData
+{
+    NSArray *datas = [mm getAllData];
+    for (NSData *data in datas) {
+        
+        NSLog(@" dataSize %lu == %@ ",data.length,[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
+    }
+}
+
+- (void)removeFirstData
+{
+    [mm removeFirstData];
+}
 
 - (void)viewDidLoad {
 	[super viewDidLoad];
 
-	// set log level
-	[MMKV setLogLevel:MMKVLogInfo];
-
-	// you can turn off logging
-	//[MMKV setLogLevel:MMKVLogNone];
-
-	// register handler
-	[MMKV registerHandler:self];
 
 	// not necessary: set MMKV's root dir
 	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
@@ -52,13 +69,36 @@
 		NSString *rootDir = [libraryPath stringByAppendingPathComponent:@"mmkv"];
 		[MMKV setMMKVBasePath:rootDir];
 	}
+    mm = [MMKV mmkvWithID:@"test" cryptKey:nil relativePath:nil];
+   
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+    btn.backgroundColor = [UIColor orangeColor];
+    [btn setTitle:@"addonedata" forState:UIControlStateNormal];
+    [btn addTarget:self action:@selector(addOneData) forControlEvents:UIControlEventTouchUpInside];
+    btn.frame = CGRectMake(0, 20, 100, 44);
+    [self.view addSubview:btn];
     
-   NSString *path = [libraryPath stringByAppendingPathComponent:@"mmkv_2"];
-    auto mmkv = [MMKV mmkvWithID:@"test/case1" relativePath:path];
+    btn = [UIButton buttonWithType:UIButtonTypeCustom];
+    btn.backgroundColor = [UIColor orangeColor];
+    [btn setTitle:@"getAllData" forState:UIControlStateNormal];
+    [btn addTarget:self action:@selector(getAllData) forControlEvents:UIControlEventTouchUpInside];
+    btn.frame = CGRectMake(0, 80, 100, 44);
+    [self.view addSubview:btn];
+    
+    
+    btn = [UIButton buttonWithType:UIButtonTypeCustom];
+    btn.backgroundColor = [UIColor orangeColor];
+    [btn setTitle:@"removeFirstData" forState:UIControlStateNormal];
+    [btn addTarget:self action:@selector(removeFirstData) forControlEvents:UIControlEventTouchUpInside];
+    btn.frame = CGRectMake(0, 160, 100, 44);
+    [self.view addSubview:btn];
+    
+//   NSString *path = [libraryPath stringByAppendingPathComponent:@"mmkv_2"];
+//    auto mmkv = [MMKV mmkvWithID:@"test/case1" relativePath:path];
 //    [[MMKV defaultMMKV] setString:@"hello mmkv" forKey:@"string"];
 //    [mmkv setString:@"hello mmkv test/case1" forKey:@"string"];
 //    NSLog(@"string:%@", [[MMKV defaultMMKV] getStringForKey:@"string"]);
-    NSLog(@"test/case1:%@", [mmkv getStringForKey:@"string"]);
+//    NSLog(@"test/case1:%@", [mmkv getStringForKey:@"string"]);
 //    [self funcionalTest];
 //	[self testReKey];
 	//[self testImportFromUserDefault];
@@ -83,7 +123,7 @@
 //		[m_arrIntKeys addObject:intKey];
 //	}
 }
-
+/*
 - (void)funcionalTest {
 	auto path = [MMKV mmkvBasePath];
 	path = [path stringByDeletingLastPathComponent];
@@ -251,7 +291,6 @@
 	[kv clearMemoryCache];
 	[self testMMKV:mmapID withCryptKey:nullptr decodeOnly:YES];
 }
-
 - (void)testImportFromUserDefault {
 	NSUserDefaults *userDefault = [[NSUserDefaults alloc] initWithSuiteName:@"testNSUserDefaults"];
 	[userDefault setBool:YES forKey:@"bool"];
@@ -532,37 +571,6 @@
 	}
 }
 
-#pragma mark - MMKVHandler
-
-- (MMKVRecoverStrategic)onMMKVCRCCheckFail:(NSString *)mmapID {
-	return MMKVOnErrorRecover;
-}
-
-- (MMKVRecoverStrategic)onMMKVFileLengthError:(NSString *)mmapID {
-	return MMKVOnErrorRecover;
-}
-
-- (void)mmkvLogWithLevel:(MMKVLogLevel)level file:(const char *)file line:(int)line func:(const char *)funcname message:(NSString *)message {
-	const char *levelDesc = nullptr;
-	switch (level) {
-		case MMKVLogDebug:
-			levelDesc = "D";
-			break;
-		case MMKVLogInfo:
-			levelDesc = "I";
-			break;
-		case MMKVLogWarning:
-			levelDesc = "W";
-			break;
-		case MMKVLogError:
-			levelDesc = "E";
-			break;
-		default:
-			levelDesc = "N";
-			break;
-	}
-
-	NSLog(@"redirect logging [%s] <%s:%d::%s> %@", levelDesc, file, line, funcname, message);
-}
+ */
 
 @end
