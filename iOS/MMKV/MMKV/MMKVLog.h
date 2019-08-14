@@ -31,8 +31,8 @@ extern id<MMKVHandler> g_callbackHandler;
 
 #ifdef ENABLE_MMKV_LOG
 
-extern bool g_isLogRedirecting;
-extern MMKVLogLevel g_currentLogLevel;
+//extern bool g_isLogRedirecting;
+//extern MMKVLogLevel g_currentLogLevel;
 
 #define __filename__ (strrchr(__FILE__, '/') + 1)
 

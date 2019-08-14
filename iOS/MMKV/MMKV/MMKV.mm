@@ -20,7 +20,6 @@
 
 #import "MMKV.h"
 #import "AESCrypt.h"
-//#import "MMKVLog.h"
 #import "MemoryFile.h"
 #import "MiniCodedInputData.h"
 #import "MiniCodedOutputData.h"
@@ -32,7 +31,6 @@
 #import <UIKit/UIKit.h>
 #endif
 
-#include "aes/openssl/openssl_md5.h"
 #import <algorithm>
 #import <sys/mman.h>
 #import <sys/stat.h>
@@ -41,8 +39,6 @@
 
 static NSMutableDictionary *g_instanceDic;
 static NSRecursiveLock *g_instanceLock;
-id<MMKVHandler> g_callbackHandler;
-bool g_isLogRedirecting = false;
 
 int DEFAULT_MMAP_SIZE;
 
@@ -50,8 +46,6 @@ int DEFAULT_MMAP_SIZE;
 #define CRC_FILE_SIZE DEFAULT_MMAP_SIZE
 #define SPECIAL_CHARACTER_DIRECTORY_NAME @"specialCharacter"
 
-static NSString *md5(NSString *value);
-static NSString *encodeMmapID(NSString *mmapID);
 
 @implementation MMKV {
 	NSRecursiveLock *m_lock;
@@ -64,15 +58,11 @@ static NSString *encodeMmapID(NSString *mmapID);
 	size_t m_size;
 	size_t m_actualSize;
 	MiniCodedOutputData *m_output;
-//	AESCrypt *m_cryptor;
 
 	BOOL m_isInBackground;
 	BOOL m_needLoadFromFile;
 	BOOL m_hasFullWriteBack;
 
-	uint32_t m_crcDigest;
-//	int m_crcFd;
-//	char *m_crcPtr;
 }
 
 #pragma mark - init
@@ -87,23 +77,6 @@ static NSString *encodeMmapID(NSString *mmapID);
 	}
 }
 
-// a generic purpose instance
-//+ (instancetype)defaultMMKV {
-//    return [MMKV mmkvWithID:DEFAULT_MMAP_ID];
-//}
-//
-//// any unique ID (com.tencent.xin.pay, etc)
-//+ (instancetype)mmkvWithID:(NSString *)mmapID {
-//    return [self mmkvWithID:mmapID cryptKey:nil];
-//}
-//
-//+ (instancetype)mmkvWithID:(NSString *)mmapID cryptKey:(NSData *)cryptKey {
-//    return [self mmkvWithID:mmapID cryptKey:cryptKey relativePath:nil];
-//}
-//
-//+ (instancetype)mmkvWithID:(NSString *)mmapID relativePath:(nullable NSString *)path {
-//    return [self mmkvWithID:mmapID cryptKey:nil relativePath:path];
-//}
 
 + (instancetype)mmkvWithID:(NSString *)mmapID cryptKey:(NSData *)cryptKey relativePath:(nullable NSString *)relativePath {
 	if (mmapID.length <= 0) {
@@ -135,11 +108,6 @@ static NSString *encodeMmapID(NSString *mmapID);
 
 		m_mmapID = kvKey;
 		m_path = path;
-//        m_crcPath = [MMKV crcPathWithMappedKVPath:m_path];
-
-//		if (cryptKey.length > 0) {
-//			m_cryptor = new AESCrypt((const unsigned char *) cryptKey.bytes, cryptKey.length);
-//		}
 
 		[self loadFromFile];
 
@@ -177,19 +145,6 @@ static NSString *encodeMmapID(NSString *mmapID);
 		delete m_output;
 		m_output = nullptr;
 	}
-//	if (m_cryptor) {
-//		delete m_cryptor;
-//		m_cryptor = nullptr;
-//	}
-
-//	if (m_crcPtr != nullptr && m_crcPtr != MAP_FAILED) {
-//		munmap(m_crcPtr, CRC_FILE_SIZE);
-//		m_crcPtr = nullptr;
-//	}
-//	if (m_crcFd >= 0) {
-//		close(m_crcFd);
-//		m_crcFd = -1;
-//	}
 }
 
 #pragma mark - Application state
@@ -312,29 +267,29 @@ static NSString *encodeMmapID(NSString *mmapID);
 			if (m_actualSize > 0) {
 				bool loadFromFile, needFullWriteback = false;
 				if (m_actualSize < m_size && m_actualSize + offset <= m_size) {
-					if ([self checkFileCRCValid] == YES) {
+//                    if ([self checkFileCRCValid] == YES) {
 						loadFromFile = true;
-					} else {
-						loadFromFile = false;
-						if (g_callbackHandler && [g_callbackHandler respondsToSelector:@selector(onMMKVCRCCheckFail:)]) {
-							auto strategic = [g_callbackHandler onMMKVCRCCheckFail:m_mmapID];
-							if (strategic == MMKVOnErrorRecover) {
-								loadFromFile = true;
-								needFullWriteback = true;
-							}
-						}
-					}
+//                    } else {
+//                        loadFromFile = false;
+//                        if (g_callbackHandler && [g_callbackHandler respondsToSelector:@selector(onMMKVCRCCheckFail:)]) {
+//                            auto strategic = [g_callbackHandler onMMKVCRCCheckFail:m_mmapID];
+//                            if (strategic == MMKVOnErrorRecover) {
+//                                loadFromFile = true;
+//                                needFullWriteback = true;
+//                            }
+//                        }
+//                    }
 				} else {
 					NSLog(@"load [%@] error: %zu size in total, file size is %zu", m_mmapID, m_actualSize, m_size);
 					loadFromFile = false;
-					if (g_callbackHandler && [g_callbackHandler respondsToSelector:@selector(onMMKVFileLengthError:)]) {
-						auto strategic = [g_callbackHandler onMMKVFileLengthError:m_mmapID];
-						if (strategic == MMKVOnErrorRecover) {
-							loadFromFile = true;
-							needFullWriteback = true;
-							[self writeActualSize:m_size - offset];
-						}
-					}
+//                    if (g_callbackHandler && [g_callbackHandler respondsToSelector:@selector(onMMKVFileLengthError:)]) {
+//                        auto strategic = [g_callbackHandler onMMKVFileLengthError:m_mmapID];
+//                        if (strategic == MMKVOnErrorRecover) {
+//                            loadFromFile = true;
+//                            needFullWriteback = true;
+//                            [self writeActualSize:m_size - offset];
+//                        }
+//                    }
 				}
 				if (loadFromFile) {
 					NSData *inputBuffer = [NSData dataWithBytesNoCopy:m_ptr + offset length:m_actualSize freeWhenDone:NO];
@@ -349,11 +304,11 @@ static NSString *encodeMmapID(NSString *mmapID);
 				} else {
 					[self writeActualSize:0];
 					m_output = new MiniCodedOutputData(m_ptr + offset, m_size - offset);
-					[self recaculateCRCDigest];
+//                    [self recaculateCRCDigest];
 				}
 			} else {
 				m_output = new MiniCodedOutputData(m_ptr + offset, m_size - offset);
-				[self recaculateCRCDigest];
+//                [self recaculateCRCDigest];
 			}
             NSLog(@"loaded [%@] with %zu values", m_mmapID, (unsigned long) m_arr.count);
 		}
@@ -500,7 +455,7 @@ static NSString *encodeMmapID(NSString *mmapID);
 	m_fd = -1;
 	m_size = 0;
 	m_actualSize = 0;
-	m_crcDigest = 0;
+//    m_crcDigest = 0;
 
 //	if (m_cryptor) {
 //		m_cryptor->reset();
@@ -694,12 +649,6 @@ static NSString *encodeMmapID(NSString *mmapID);
 			m_output->seek(m_actualSize);
 		}
 
-//		if (m_cryptor) {
-//			m_cryptor->reset();
-//			auto ptr = (unsigned char *) data.bytes;
-//			m_cryptor->encrypt(ptr, ptr, data.length);
-//		}
-
 		if ([self writeActualSize:data.length] == NO) {
 			return NO;
 		}
@@ -710,9 +659,6 @@ static NSString *encodeMmapID(NSString *mmapID);
 		                                   writeBlock:^(MiniCodedOutputData *output) {
 			                                   output->writeRawData(data);
 		                                   }];
-//        if (ret) {
-//            [self recaculateCRCDigest];
-//        }
 		return ret;
 	}
 	return YES;
@@ -765,7 +711,6 @@ static NSString *encodeMmapID(NSString *mmapID);
 
 	auto ret = [self appendData:data forKey:key];
 	if (ret) {
-//        [m_dic setObject:data forKey:key];
         [m_arr addObject:data];
 		m_hasFullWriteBack = NO;
 	}
@@ -789,24 +734,8 @@ static NSString *encodeMmapID(NSString *mmapID);
 //                                          output->writeString(key);
 			                              output->writeData(data); // note: write size of data
 		                              }];
-//        if (ret) {
-//            static const int offset = pbFixed32Size(0);
-//            auto ptr = (uint8_t *) m_ptr + offset + m_actualSize - size;
-//			if (m_cryptor) {
-//				m_cryptor->encrypt(ptr, ptr, size);
-//			}
-//            [self updateCRCDigest:ptr withSize:size];
-//        }
 	}
 	return ret;
-}
-
-- (NSData *)getRawDataForKey:(NSString *)key {
-//    CScopedLock lock(m_lock);
-//    //先试图去加载文件,获得m_dic,在通过m_dic获得对应的数据
-//    [self checkLoadData];
-//    return [m_dic objectForKey:key];
-    return nil;
 }
 
 - (BOOL)fullWriteBack {
@@ -831,11 +760,6 @@ static NSString *encodeMmapID(NSString *mmapID);
 	if (allData.length > 0) {
 		int offset = pbFixed32Size(0);
 		if (allData.length + offset <= m_size) {
-//			if (m_cryptor) {
-//				m_cryptor->reset();
-//				auto ptr = (unsigned char *) allData.bytes;
-//				m_cryptor->encrypt(ptr, ptr, allData.length);
-//			}
 			BOOL ret = [self writeActualSize:allData.length];
 			if (ret) {
 				delete m_output;
@@ -845,7 +769,6 @@ static NSString *encodeMmapID(NSString *mmapID);
 					                              output->writeRawData(allData); // note: don't write size of data
 				                              }];
 				if (ret) {
-					[self recaculateCRCDigest];
 					m_hasFullWriteBack = YES;
 				}
 			}
@@ -862,492 +785,14 @@ static NSString *encodeMmapID(NSString *mmapID);
 	if (m_fd >= 0 && m_size > 0 && m_output != nullptr && m_ptr != nullptr && m_ptr != MAP_FAILED) {
 		return YES;
 	}
-	//	MMKVWarning(@"[%@] file not valid", m_mmapID);
+    NSLog(@"[%@] file not valid", m_mmapID);
 	return NO;
 }
 
-// assuming m_ptr & m_size is set
-- (BOOL)checkFileCRCValid {
-	if (m_ptr != nullptr && m_ptr != MAP_FAILED) {
-		int offset = pbFixed32Size(0);
-		m_crcDigest = (uint32_t) crc32(0, (const uint8_t *) m_ptr + offset, (uint32_t) m_actualSize);
-
-		// for backward compatibility
-		if (!isFileExist(m_crcPath)) {
-			NSLog(@"crc32 file not found:%@", m_crcPath);
-			return YES;
-		}
-		NSData *oData = [NSData dataWithContentsOfFile:m_crcPath];
-		uint32_t crc32 = 0;
-		@try {
-			MiniCodedInputData input(oData);
-			crc32 = input.readFixed32();
-		} @catch (NSException *exception) {
-			NSLog(@"%@", exception);
-		}
-		if (m_crcDigest == crc32) {
-			return YES;
-		}
-		NSLog(@"check crc [%@] fail, crc32:%u, m_crcDigest:%u", m_mmapID, crc32, m_crcDigest);
-	}
-	return NO;
-}
-
-- (void)recaculateCRCDigest {
-	if (m_ptr != nullptr && m_ptr != MAP_FAILED) {
-		m_crcDigest = 0;
-		int offset = pbFixed32Size(0);
-		[self updateCRCDigest:(const uint8_t *) m_ptr + offset withSize:m_actualSize];
-	}
-}
-
-- (void)updateCRCDigest:(const uint8_t *)ptr withSize:(size_t)length {
-//	if (ptr == nullptr) {
-//		return;
-//	}
-//	m_crcDigest = (uint32_t) crc32(m_crcDigest, ptr, (uint32_t) length);
-
-//	if (m_crcPtr == nullptr || m_crcPtr == MAP_FAILED) {
-//		[self prepareCRCFile];
-//	}
-//	if (m_crcPtr == nullptr || m_crcPtr == MAP_FAILED) {
-//		return;
-//	}
-
-//	static const size_t bufferLength = pbFixed32Size(0);
-//	if (m_isInBackground) {
-//		if (mlock(m_crcPtr, bufferLength) != 0) {
-//			MMKVError(@"fail to mlock crc [%@]-%p, %d:%s", m_mmapID, m_crcPtr, errno, strerror(errno));
-//			// just fail on this condition, otherwise app will crash anyway
-//			return;
-//		}
-//	}
-
-//	@try {
-//		MiniCodedOutputData output(m_crcPtr, bufferLength);
-//		output.writeFixed32((int32_t) m_crcDigest);
-//	} @catch (NSException *exception) {
-//		MMKVError(@"%@", exception);
-//	}
-//	if (m_isInBackground) {
-//		munlock(m_crcPtr, bufferLength);
-//	}
-}
-
-//- (void)prepareCRCFile {
-//	if (m_crcPtr == nullptr || m_crcPtr == MAP_FAILED) {
-//		if (!isFileExist(m_crcPath)) {
-//			createFile(m_crcPath);
-//		}
-//		m_crcFd = open(m_crcPath.UTF8String, O_RDWR, S_IRWXU);
-//		if (m_crcFd < 0) {
-//			MMKVError(@"fail to open:%@, %s", m_crcPath, strerror(errno));
-//			removeFile(m_crcPath);
-//		} else {
-//			size_t size = 0;
-//			struct stat st = {};
-//			if (fstat(m_crcFd, &st) != -1) {
-//				size = (size_t) st.st_size;
-//			}
-//			int fileLegth = CRC_FILE_SIZE;
-//			if (size != fileLegth) {
-//				size = fileLegth;
-//				if (ftruncate(m_crcFd, size) != 0) {
-//					MMKVError(@"fail to truncate [%@] to size %zu, %s", m_crcPath, size, strerror(errno));
-//					close(m_crcFd);
-//					m_crcFd = -1;
-//					removeFile(m_crcPath);
-//					return;
-//				}
-//			}
-//			m_crcPtr = (char *) mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, m_crcFd, 0);
-//			if (m_crcPtr == MAP_FAILED) {
-//				MMKVError(@"fail to mmap [%@], %s", m_crcPath, strerror(errno));
-//				close(m_crcFd);
-//				m_crcFd = -1;
-//			}
-//		}
-//	}
-//}
-
-#pragma mark - encryption & decryption
-
-//- (nullable NSData *)cryptKey {
-//	if (m_cryptor) {
-//		NSMutableData *data = [NSMutableData dataWithLength:AES_KEY_LEN];
-//		m_cryptor->getKey(data.mutableBytes);
-//		return data;
-//	}
-//	return NULL;
-//}
-
-//- (BOOL)reKey:(NSData *)newKey {
-//    CScopedLock lock(m_lock);
-//    [self checkLoadData];
-
-//	if (m_cryptor) {
-//		if (newKey.length > 0) {
-//			NSData *oldKey = [self cryptKey];
-//			if ([newKey isEqualToData:oldKey]) {
-//				return YES;
-//			} else {
-//				// change encryption key
-//				MMKVInfo(@"reKey with new aes key");
-//				delete m_cryptor;
-//				auto ptr = (const unsigned char *) newKey.bytes;
-//				m_cryptor = new AESCrypt(ptr, newKey.length);
-//				return [self fullWriteBack];
-//			}
-//		} else {
-//			// decryption to plain text
-//			MMKVInfo(@"reKey with no aes key");
-//			delete m_cryptor;
-//			m_cryptor = nullptr;
-//			return [self fullWriteBack];
-//		}
-//	} else
-//    {
-//        if (newKey.length > 0) {
-//            // transform plain text to encrypted text
-//            NSLog(@"reKey with aes key");
-//            auto ptr = (const unsigned char *) newKey.bytes;
-////            m_cryptor = new AESCrypt(ptr, newKey.length);
-//            return [self fullWriteBack];
-//        } else {
-//            return YES;
-//        }
-//    }
-//    return NO;
-//}
-
-#pragma mark - set & get
-
-- (BOOL)setObject:(nullable NSObject<NSCoding> *)object forKey:(NSString *)key {
-	if (key.length <= 0) {
-		return NO;
-	}
-	if (object == nil) {
-		[self removeValueForKey:key];
-		return YES;
-	}
-
-	NSData *data;
-	if ([MiniPBCoder isMiniPBCoderCompatibleObject:object]) {
-		data = [MiniPBCoder encodeDataWithObject:object];
-	} else {
-		/*if ([object conformsToProtocol:@protocol(NSCoding)])*/ {
-			data = [NSKeyedArchiver archivedDataWithRootObject:object];
-		}
-	}
-
-	return [self setRawData:data forKey:key];
-}
-
-- (BOOL)setBool:(BOOL)value forKey:(NSString *)key {
-	if (key.length <= 0) {
-		return NO;
-	}
-	size_t size = pbBoolSize(value);
-	NSMutableData *data = [NSMutableData dataWithLength:size];
-	MiniCodedOutputData output(data);
-	output.writeBool(value);
-
-	return [self setRawData:data forKey:key];
-}
-
-- (BOOL)setInt32:(int32_t)value forKey:(NSString *)key {
-	if (key.length <= 0) {
-		return NO;
-	}
-	size_t size = pbInt32Size(value);
-	NSMutableData *data = [NSMutableData dataWithLength:size];
-	MiniCodedOutputData output(data);
-	output.writeInt32(value);
-
-	return [self setRawData:data forKey:key];
-}
-
-- (BOOL)setUInt32:(uint32_t)value forKey:(NSString *)key {
-	if (key.length <= 0) {
-		return NO;
-	}
-	size_t size = pbUInt32Size(value);
-	NSMutableData *data = [NSMutableData dataWithLength:size];
-	MiniCodedOutputData output(data);
-	output.writeUInt32(value);
-
-	return [self setRawData:data forKey:key];
-}
-
-- (BOOL)setInt64:(int64_t)value forKey:(NSString *)key {
-	if (key.length <= 0) {
-		return NO;
-	}
-	size_t size = pbInt64Size(value);
-	NSMutableData *data = [NSMutableData dataWithLength:size];
-	MiniCodedOutputData output(data);
-	output.writeInt64(value);
-
-	return [self setRawData:data forKey:key];
-}
-
-- (BOOL)setUInt64:(uint64_t)value forKey:(NSString *)key {
-	if (key.length <= 0) {
-		return NO;
-	}
-	size_t size = pbUInt64Size(value);
-	NSMutableData *data = [NSMutableData dataWithLength:size];
-	MiniCodedOutputData output(data);
-	output.writeUInt64(value);
-
-	return [self setRawData:data forKey:key];
-}
-
-- (BOOL)setFloat:(float)value forKey:(NSString *)key {
-	if (key.length <= 0) {
-		return NO;
-	}
-	size_t size = pbFloatSize(value);
-	NSMutableData *data = [NSMutableData dataWithLength:size];
-	MiniCodedOutputData output(data);
-	output.writeFloat(value);
-
-	return [self setRawData:data forKey:key];
-}
-
-- (BOOL)setDouble:(double)value forKey:(NSString *)key {
-	if (key.length <= 0) {
-		return NO;
-	}
-	size_t size = pbDoubleSize(value);
-	NSMutableData *data = [NSMutableData dataWithLength:size];
-	MiniCodedOutputData output(data);
-	output.writeDouble(value);
-
-	return [self setRawData:data forKey:key];
-}
-
-- (BOOL)setString:(NSString *)value forKey:(NSString *)key {
-	return [self setObject:value forKey:key];
-}
-
-- (BOOL)setDate:(NSDate *)value forKey:(NSString *)key {
-	return [self setObject:value forKey:key];
-}
-
-- (BOOL)setData:(NSData *)value forKey:(NSString *)key {
-	return [self setObject:value forKey:key];
-}
-
-- (id)getObjectOfClass:(Class)cls forKey:(NSString *)key {
-	if (key.length <= 0) {
-		return nil;
-	}
-	NSData *data = [self getRawDataForKey:key];
-	if (data.length > 0) {
-
-		if ([MiniPBCoder isMiniPBCoderCompatibleType:cls]) {
-			return [MiniPBCoder decodeObjectOfClass:cls fromData:data];
-		} else {
-			if ([cls conformsToProtocol:@protocol(NSCoding)]) {
-				return [NSKeyedUnarchiver unarchiveObjectWithData:data];
-			}
-		}
-	}
-	return nil;
-}
-
-- (BOOL)getBoolForKey:(NSString *)key {
-	return [self getBoolForKey:key defaultValue:FALSE];
-}
-- (BOOL)getBoolForKey:(NSString *)key defaultValue:(BOOL)defaultValue {
-	if (key.length <= 0) {
-		return defaultValue;
-	}
-	NSData *data = [self getRawDataForKey:key];
-	if (data.length > 0) {
-		@try {
-			MiniCodedInputData input(data);
-			return input.readBool();
-		} @catch (NSException *exception) {
-			NSLog(@"%@", exception);
-		}
-	}
-	return defaultValue;
-}
-
-- (int32_t)getInt32ForKey:(NSString *)key {
-	return [self getInt32ForKey:key defaultValue:0];
-}
-- (int32_t)getInt32ForKey:(NSString *)key defaultValue:(int32_t)defaultValue {
-	if (key.length <= 0) {
-		return defaultValue;
-	}
-	NSData *data = [self getRawDataForKey:key];
-	if (data.length > 0) {
-		@try {
-			MiniCodedInputData input(data);
-			return input.readInt32();
-		} @catch (NSException *exception) {
-			NSLog(@"%@", exception);
-		}
-	}
-	return defaultValue;
-}
-
-- (uint32_t)getUInt32ForKey:(NSString *)key {
-	return [self getUInt32ForKey:key defaultValue:0];
-}
-- (uint32_t)getUInt32ForKey:(NSString *)key defaultValue:(uint32_t)defaultValue {
-	if (key.length <= 0) {
-		return defaultValue;
-	}
-	NSData *data = [self getRawDataForKey:key];
-	if (data.length > 0) {
-		@try {
-			MiniCodedInputData input(data);
-			return input.readUInt32();
-		} @catch (NSException *exception) {
-			NSLog(@"%@", exception);
-		}
-	}
-	return defaultValue;
-}
-
-- (int64_t)getInt64ForKey:(NSString *)key {
-	return [self getInt64ForKey:key defaultValue:0];
-}
-- (int64_t)getInt64ForKey:(NSString *)key defaultValue:(int64_t)defaultValue {
-	if (key.length <= 0) {
-		return defaultValue;
-	}
-	NSData *data = [self getRawDataForKey:key];
-	if (data.length > 0) {
-		@try {
-			MiniCodedInputData input(data);
-			return input.readInt64();
-		} @catch (NSException *exception) {
-			NSLog(@"%@", exception);
-		}
-	}
-	return defaultValue;
-}
-
-- (uint64_t)getUInt64ForKey:(NSString *)key {
-	return [self getUInt64ForKey:key defaultValue:0];
-}
-- (uint64_t)getUInt64ForKey:(NSString *)key defaultValue:(uint64_t)defaultValue {
-	if (key.length <= 0) {
-		return defaultValue;
-	}
-	NSData *data = [self getRawDataForKey:key];
-	if (data.length > 0) {
-		@try {
-			MiniCodedInputData input(data);
-			return input.readUInt64();
-		} @catch (NSException *exception) {
-			NSLog(@"%@", exception);
-		}
-	}
-	return defaultValue;
-}
-
-- (float)getFloatForKey:(NSString *)key {
-	return [self getFloatForKey:key defaultValue:0];
-}
-- (float)getFloatForKey:(NSString *)key defaultValue:(float)defaultValue {
-	if (key.length <= 0) {
-		return defaultValue;
-	}
-	NSData *data = [self getRawDataForKey:key];
-	if (data.length > 0) {
-		@try {
-			MiniCodedInputData input(data);
-			return input.readFloat();
-		} @catch (NSException *exception) {
-			NSLog(@"%@", exception);
-		}
-	}
-	return defaultValue;
-}
-
-- (double)getDoubleForKey:(NSString *)key {
-	return [self getDoubleForKey:key defaultValue:0];
-}
-- (double)getDoubleForKey:(NSString *)key defaultValue:(double)defaultValue {
-	if (key.length <= 0) {
-		return defaultValue;
-	}
-	NSData *data = [self getRawDataForKey:key];
-	if (data.length > 0) {
-		@try {
-			MiniCodedInputData input(data);
-			return input.readDouble();
-		} @catch (NSException *exception) {
-			NSLog(@"%@", exception);
-		}
-	}
-	return defaultValue;
-}
-
-- (nullable NSString *)getStringForKey:(NSString *)key {
-	return [self getStringForKey:key defaultValue:nil];
-}
-- (nullable NSString *)getStringForKey:(NSString *)key defaultValue:(nullable NSString *)defaultValue {
-	if (key.length <= 0) {
-		return defaultValue;
-	}
-	NSString *valueString = [self getObjectOfClass:NSString.class forKey:key];
-	if (!valueString) {
-		valueString = defaultValue;
-	}
-	return valueString;
-}
-
-- (nullable NSDate *)getDateForKey:(NSString *)key {
-	return [self getDateForKey:key defaultValue:nil];
-}
-- (nullable NSDate *)getDateForKey:(NSString *)key defaultValue:(nullable NSDate *)defaultValue {
-	if (key.length <= 0) {
-		return defaultValue;
-	}
-	NSDate *valueDate = [self getObjectOfClass:NSDate.class forKey:key];
-	if (!valueDate) {
-		valueDate = defaultValue;
-	}
-	return valueDate;
-}
-
-- (nullable NSData *)getDataForKey:(NSString *)key {
-	return [self getDataForKey:key defaultValue:nil];
-}
-- (nullable NSData *)getDataForKey:(NSString *)key defaultValue:(nullable NSData *)defaultValue {
-	if (key.length <= 0) {
-		return defaultValue;
-	}
-	NSData *valueData = [self getObjectOfClass:NSData.class forKey:key];
-	if (!valueData) {
-		valueData = defaultValue;
-	}
-	return valueData;
-}
-
-- (size_t)getValueSizeForKey:(NSString *)key NS_SWIFT_NAME(valueSize(forKey:)) {
-	if (key.length <= 0) {
-		return 0;
-	}
-	NSData *data = [self getRawDataForKey:key];
-	return data.length;
-}
 
 #pragma mark - enumerate
 
-- (BOOL)containsKey:(NSString *)key {
-	CScopedLock lock(m_lock);
-	[self checkLoadData];
-//    return ([m_arr contain:key] != nil);
-    return [m_arr containsObject:key];
-}
+
 
 - (size_t)count {
 	CScopedLock lock(m_lock);
@@ -1367,54 +812,6 @@ static NSString *encodeMmapID(NSString *mmapID);
 	return m_actualSize;
 }
 
-//- (void)enumerateKeys:(void (^)(NSString *key, BOOL *stop))block {
-//    if (block == nil) {
-//        return;
-//    }
-//    MMKVInfo(@"enumerate [%@] begin", m_mmapID);
-//    CScopedLock lock(m_lock);
-//    [self checkLoadData];
-//    [m_dic enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
-//        block(key, stop);
-//    }];
-//    MMKVInfo(@"enumerate [%@] finish", m_mmapID);
-//}
-
-//- (NSArray *)allKeys {
-//    CScopedLock lock(m_lock);
-//    [self checkLoadData];
-//
-//    return [m_dic allKeys];
-//}
-
-- (void)removeValueForKey:(NSString *)key {
-	if (key.length <= 0) {
-		return;
-	}
-	CScopedLock lock(m_lock);
-	[self checkLoadData];
-
-//    [m_dic removeObjectForKey:key];
-	m_hasFullWriteBack = NO;
-
-	static NSData *data = [NSData data];
-	[self appendData:data forKey:key];
-}
-
-- (void)removeValuesForKeys:(NSArray *)arrKeys {
-	if (arrKeys.count <= 0) {
-		return;
-	}
-	CScopedLock lock(m_lock);
-	[self checkLoadData];
-
-//    [m_dic removeObjectsForKeys:arrKeys];
-	m_hasFullWriteBack = NO;
-
-//    MMKVInfo(@"remove [%@] %lu keys, %lu remain", m_mmapID, (unsigned long) arrKeys.count, (unsigned long) m_dic.count);
-
-	[self fullWriteBack];
-}
 
 #pragma mark - Boring stuff
 
@@ -1436,9 +833,6 @@ static NSString *encodeMmapID(NSString *mmapID);
 	if (msync(m_ptr, m_actualSize, flag) != 0) {
 		NSLog(@"fail to msync[%d] data file of [%@]:%s", flag, m_mmapID, strerror(errno));
 	}
-//	if (msync(m_crcPtr, CRC_FILE_SIZE, flag) != 0) {
-//		MMKVError(@"fail to msync[%d] crc-32 file of [%@]:%s", flag, m_mmapID, strerror(errno));
-//	}
 }
 
 static NSString *g_basePath = nil;
@@ -1467,7 +861,7 @@ static NSString *g_basePath = nil;
 + (NSString *)mmapKeyWithMMapID:(NSString *)mmapID relativePath:(nullable NSString *)relativePath {
 	NSString *string = nil;
 	if ([relativePath length] > 0 && [relativePath isEqualToString:[MMKV mmkvBasePath]] == NO) {
-		string = md5([relativePath stringByAppendingPathComponent:mmapID]);
+        string = [relativePath stringByAppendingPathComponent:mmapID];//md5([relativePath stringByAppendingPathComponent:mmapID]);
 	} else {
 		string = mmapID;
 	}
@@ -1484,166 +878,11 @@ static NSString *g_basePath = nil;
 	}
 
 	if ([basePath length] > 0) {
-		NSString *mmapIDstring = encodeMmapID(mmapID);
+        NSString *mmapIDstring = mmapID;//encodeMmapID(mmapID);
 		return [basePath stringByAppendingPathComponent:mmapIDstring];
 	} else {
 		return @"";
 	}
 }
 
-//+ (NSString *)crcPathWithMappedKVPath:(NSString *)kvPath {
-//    return [kvPath stringByAppendingString:@".crc"];
-//}
-//
-//+ (BOOL)isFileValid:(NSString *)mmapID {
-//    return [self isFileValid:mmapID relativePath:nil];
-//}
-//
-//+ (BOOL)isFileValid:(NSString *)mmapID relativePath:(nullable NSString *)path {
-//    NSFileManager *fileManager = [NSFileManager defaultManager];
-//
-//    NSString *kvPath = [self mappedKVPathWithID:mmapID relativePath:path];
-//    if ([fileManager fileExistsAtPath:kvPath] == NO) {
-//        // kv file not exist
-//        return YES;
-//    }
-//
-//    NSString *crcPath = [self crcPathWithMappedKVPath:kvPath];
-//    if ([fileManager fileExistsAtPath:crcPath] == NO) {
-//        // crc file not exist
-//        return YES;
-//    }
-//
-//    NSData *fileData = [NSData dataWithContentsOfFile:crcPath];
-//    uint32_t crcFile = 0;
-//    @try {
-//        MiniCodedInputData input(fileData);
-//        crcFile = input.readFixed32();
-//    } @catch (NSException *exception) {
-//        return NO;
-//    }
-//
-//    const int offset = pbFixed32Size(0);
-//    size_t actualSize = 0;
-//    fileData = [NSData dataWithContentsOfFile:kvPath];
-//    @try {
-//        actualSize = MiniCodedInputData(fileData).readFixed32();
-//    } @catch (NSException *exception) {
-//        return NO;
-//    }
-//
-//    if (actualSize > fileData.length - offset) {
-//        return NO;
-//    }
-//
-//    uint32_t crcDigest = (uint32_t) crc32(0, (const uint8_t *) fileData.bytes + offset, (uint32_t) actualSize);
-//
-//    return crcFile == crcDigest;
-//}
-
-//+ (void)registerHandler:(id<MMKVHandler>)handler {
-//    CScopedLock lock(g_instanceLock);
-//    g_callbackHandler = handler;
-//
-//    if ([g_callbackHandler respondsToSelector:@selector(mmkvLogWithLevel:file:line:func:message:)]) {
-//        g_isLogRedirecting = true;
-//
-//        // some logging before registerHandler
-//        NSLog(@"pagesize:%d", DEFAULT_MMAP_SIZE);
-//    }
-//}
-
-//+ (void)unregiserHandler {
-//    CScopedLock lock(g_instanceLock);
-//    g_callbackHandler = nil;
-//    g_isLogRedirecting = false;
-//}
-
-//+ (void)setLogLevel:(MMKVLogLevel)logLevel {
-//    CScopedLock lock(g_instanceLock);
-//    g_currentLogLevel = logLevel;
-//}
-
-//- (uint32_t)migrateFromUserDefaults:(NSUserDefaults *)userDaults {
-//    NSDictionary *dic = [userDaults dictionaryRepresentation];
-//    if (dic.count <= 0) {
-//        MMKVInfo(@"migrate data fail, userDaults is nil or empty");
-//        return 0;
-//    }
-//    __block uint32_t count = 0;
-//    [dic enumerateKeysAndObjectsUsingBlock:^(id _Nonnull key, id _Nonnull obj, BOOL *_Nonnull stop) {
-//        if ([key isKindOfClass:[NSString class]]) {
-//            NSString *stringKey = key;
-//            if ([MMKV tranlateData:obj key:stringKey kv:self]) {
-//                count++;
-//            }
-//        } else {
-//            MMKVWarning(@"unknown type of key:%@", key);
-//        }
-//    }];
-//    return count;
-//}
-
-//+ (BOOL)tranlateData:(id)obj key:(NSString *)key kv:(MMKV *)kv {
-//    if ([obj isKindOfClass:[NSString class]]) {
-//        return [kv setString:obj forKey:key];
-//    } else if ([obj isKindOfClass:[NSData class]]) {
-//        return [kv setData:obj forKey:key];
-//    } else if ([obj isKindOfClass:[NSDate class]]) {
-//        return [kv setDate:obj forKey:key];
-//    } else if ([obj isKindOfClass:[NSNumber class]]) {
-//        NSNumber *num = obj;
-//        CFNumberType numberType = CFNumberGetType((CFNumberRef) obj);
-//        switch (numberType) {
-//            case kCFNumberCharType:
-//            case kCFNumberSInt8Type:
-//            case kCFNumberSInt16Type:
-//            case kCFNumberSInt32Type:
-//            case kCFNumberIntType:
-//            case kCFNumberShortType:
-//                return [kv setInt32:num.intValue forKey:key];
-//            case kCFNumberSInt64Type:
-//            case kCFNumberLongType:
-//            case kCFNumberNSIntegerType:
-//            case kCFNumberLongLongType:
-//                return [kv setInt64:num.longLongValue forKey:key];
-//            case kCFNumberFloat32Type:
-//                return [kv setFloat:num.floatValue forKey:key];
-//            case kCFNumberFloat64Type:
-//            case kCFNumberDoubleType:
-//                return [kv setDouble:num.doubleValue forKey:key];
-//            default:
-//                MMKVWarning(@"unknown number type:%ld, key:%@", (long) numberType, key);
-//                return NO;
-//        }
-//    } else if ([obj isKindOfClass:[NSArray class]] || [obj isKindOfClass:[NSDictionary class]]) {
-//        return [kv setObject:obj forKey:key];
-//    } else {
-//        MMKVWarning(@"unknown type of key:%@", key);
-//    }
-//    return NO;
-//}
-
 @end
-
-static NSString *md5(NSString *value) {
-	unsigned char md[MD5_DIGEST_LENGTH] = {0};
-	char tmp[3] = {0}, buf[33] = {0};
-	openssl::MD5((unsigned char *) value.UTF8String, [value lengthOfBytesUsingEncoding:NSUTF8StringEncoding], md);
-	for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-		sprintf(tmp, "%2.2x", md[i]);
-		strcat(buf, tmp);
-	}
-	return [NSString stringWithCString:buf encoding:NSASCIIStringEncoding];
-}
-
-static NSString *encodeMmapID(NSString *mmapID) {
-	static NSCharacterSet *specialCharacters = [NSCharacterSet characterSetWithCharactersInString:@"\\/:*?\"<>|"];
-	auto range = [mmapID rangeOfCharacterFromSet:specialCharacters];
-	if (range.location != NSNotFound) {
-		NSString *encodedID = md5(mmapID);
-		return [SPECIAL_CHARACTER_DIRECTORY_NAME stringByAppendingFormat:@"/%@", encodedID];
-	} else {
-		return mmapID;
-	}
-}

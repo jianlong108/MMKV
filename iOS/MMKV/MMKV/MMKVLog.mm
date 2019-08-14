@@ -29,33 +29,33 @@ MMKVLogLevel g_currentLogLevel = MMKVLogInfo;
 #endif
 
 static const char *MMKVLogLevelDesc(MMKVLogLevel level) {
-	switch (level) {
-		case MMKVLogDebug:
-			return "D";
-		case MMKVLogInfo:
-			return "I";
-		case MMKVLogWarning:
-			return "W";
-		case MMKVLogError:
-			return "E";
-		default:
-			return "N";
-	}
+    switch (level) {
+        case MMKVLogDebug:
+            return "D";
+        case MMKVLogInfo:
+            return "I";
+        case MMKVLogWarning:
+            return "W";
+        case MMKVLogError:
+            return "E";
+        default:
+            return "N";
+    }
 }
 
 void _MMKVLogWithLevel(MMKVLogLevel level, const char *file, const char *func, int line, NSString *format, ...) {
-	if (level >= g_currentLogLevel) {
-		va_list argList;
-		va_start(argList, format);
-		NSString *message = [[NSString alloc] initWithFormat:format arguments:argList];
-		va_end(argList);
+    if (level >= g_currentLogLevel) {
+        va_list argList;
+        va_start(argList, format);
+        NSString *message = [[NSString alloc] initWithFormat:format arguments:argList];
+        va_end(argList);
 
-		if (g_isLogRedirecting) {
-			[g_callbackHandler mmkvLogWithLevel:level file:file line:line func:func message:message];
-		} else {
-			NSLog(@"[%s] <%s:%d::%s> %@", MMKVLogLevelDesc(level), file, line, func, message);
-		}
-	}
+//        if (g_isLogRedirecting) {
+//            [g_callbackHandler mmkvLogWithLevel:level file:file line:line func:func message:message];
+//        } else {
+            NSLog(@"[%s] <%s:%d::%s> %@", MMKVLogLevelDesc(level), file, line, func, message);
+//        }
+    }
 }
 
 #endif // ENABLE_MMKV_LOG
