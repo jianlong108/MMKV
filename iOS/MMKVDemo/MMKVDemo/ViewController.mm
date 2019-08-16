@@ -21,6 +21,7 @@
 #import "ViewController.h"
 #import "MMKVDemo-Swift.h"
 #import <MMKV/MMKV.h>
+#import <sys/xattr.h>
 
 @interface ViewController () <MMKVHandler>
 @end
@@ -36,7 +37,7 @@ static MMKV *mm;
 - (void)addOneData
 {
     static int num = 0;
-    NSData *data = [[NSString stringWithFormat:@"hello World hello Worldhello Worldhello Worldhello World hello Worldhello Worldhello Worldhello World hello Worldhello Worldhello Worldhello World hello Worldhello Worldhello World%d",num] dataUsingEncoding:NSUTF8StringEncoding];
+    NSData *data = [[NSString stringWithFormat:@"hello World 2019年，阿里前端已经诞生了14年。在我们携手走过的这14年里，从攻克兼容到引领无线时代，从工程化到全栈化，重塑中后台，挺进智能化，创新、开放、重塑、定义未来是我们的代名词。我们拥有共同的使命愿景，链接商业，让数字世界触手可及！我们每一个人都是 Alibaba F2E 的代言人！ 为了能够让阿里巴巴经济体内的前端开发都能够有一个聚一聚的机会，我们筹备了阿里巴巴经济体前端大会。这次让我们阿里前端聚… %d",num] dataUsingEncoding:NSUTF8StringEncoding];
     NSLog(@"%lu",data.length);
     [mm appendData:data];
     num ++;
@@ -44,13 +45,31 @@ static MMKV *mm;
     [mm sync];
 }
 
+- (void)addMostDataAsync
+{
+    static int num = 0;
+    for (int i = 0; i<10000; i++) {
+        dispatch_async(dispatch_get_global_queue(0, 0), ^{
+            
+            NSData *data = [[NSString stringWithFormat:@"hello World 2019年，阿里前端已经诞生了14年。在我们携手走过的这14年里，从攻克兼容到引领无线时代，从工程化到全栈化，重塑中后台，挺进智能化，创新、开放、重塑、定义未来是我们的代名词。我们拥有共同的使命愿景，链接商业，让数字世界触手可及！我们每一个人都是 Alibaba F2E 的代言人！ 为了能够让阿里巴巴经济体内的前端开发都能够有一个聚一聚的机会，我们筹备了阿里巴巴经济体前端大会。这次让我们阿里前端聚… %d",num] dataUsingEncoding:NSUTF8StringEncoding];
+            
+            [mm appendData:data];
+            
+            num ++;
+            NSLog(@"writdata: mm的size %lu %lu",mm.totalSize,mm.actualSize);
+        });
+    }
+}
+
 - (void)getAllData
 {
-    NSArray *datas = [mm getAllData];
-    for (NSData *data in datas) {
-        
-        NSLog(@" dataSize %lu == %@ ",data.length,[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
-    }
+    dispatch_async(dispatch_get_global_queue(0, 0), ^{
+        NSArray *datas = [mm getAllData];
+        for (NSData *data in datas) {
+            
+            NSLog(@"getalldata: dataSize %lu == %@ ",data.length,[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
+        }
+    });
 }
 
 - (void)removeFirstData
@@ -58,9 +77,39 @@ static MMKV *mm;
     [mm removeFirstData];
 }
 
+- (void)addExtendedAttributeWithName:(NSString *)attrName num:(NSUInteger)num filePath:(NSString *)filePath
+{
+    const char *path = [filePath UTF8String];
+    const char *name = [attrName UTF8String];
+    
+    int result = setxattr(path, name, (void *)num, 0, 0, 0);
+    
+    if (result < 0) {
+        NSLog(@"FileInfo: setxattr(%@, %@): error = %s",
+              attrName,
+              filePath,
+              strerror(errno));
+    }
+}
+
+- (NSUInteger)removeExtendedAttributeWithName:(NSString *)attrName filePath:(NSString *)filePath
+{
+    const char *path = [filePath UTF8String];
+    const char *name = [attrName UTF8String];
+    NSUInteger num = 0;
+    ssize_t result = getxattr(path, name, &num, 0, 0, 0);
+    
+    if (result < 0 && errno != ENOATTR) {
+        NSLog(@"DDLogFileInfo: removexattr(%@, %@): error = %s",
+              attrName,
+              filePath,
+              strerror(errno));
+    }
+    return num;
+}
+
 - (void)viewDidLoad {
 	[super viewDidLoad];
-
 
 	// not necessary: set MMKV's root dir
 	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
@@ -68,21 +117,37 @@ static MMKV *mm;
 	if ([libraryPath length] > 0) {
 		NSString *rootDir = [libraryPath stringByAppendingPathComponent:@"mmkv"];
 		[MMKV setMMKVBasePath:rootDir];
+        
+        if ([[NSFileManager defaultManager] setAttributes:@{@"elementNum":@(3)} ofItemAtPath:[rootDir stringByAppendingPathComponent:@"test"] error:nil]) {
+            
+            NSDictionary *dic = [[NSFileManager defaultManager] attributesOfItemAtPath:[rootDir stringByAppendingPathComponent:@"test"] error:nil];
+            NSLog(@"dic %@",dic);
+            NSLog(@"filesize %llu",[[dic objectForKey:NSFileSize] unsignedLongLongValue]);
+            NSLog(@"num %llu",[[dic objectForKey:@"elementNum"] unsignedLongLongValue]);
+        }
+        [self addExtendedAttributeWithName:@"elementNum" num:3 filePath:[rootDir stringByAppendingPathComponent:@"test"]];
+        
+        
+        NSLog(@"==== %lu",[self removeExtendedAttributeWithName:@"elementNum" filePath:[rootDir stringByAppendingPathComponent:@"test"]]);
+        
+        
 	}
     mm = [MMKV mmkvWithID:@"test" cryptKey:nil relativePath:nil];
    
+    
+    
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
     btn.backgroundColor = [UIColor orangeColor];
     [btn setTitle:@"addonedata" forState:UIControlStateNormal];
     [btn addTarget:self action:@selector(addOneData) forControlEvents:UIControlEventTouchUpInside];
-    btn.frame = CGRectMake(0, 20, 100, 44);
+    btn.frame = CGRectMake(0, 20, 150, 44);
     [self.view addSubview:btn];
     
     btn = [UIButton buttonWithType:UIButtonTypeCustom];
     btn.backgroundColor = [UIColor orangeColor];
     [btn setTitle:@"getAllData" forState:UIControlStateNormal];
     [btn addTarget:self action:@selector(getAllData) forControlEvents:UIControlEventTouchUpInside];
-    btn.frame = CGRectMake(0, 80, 100, 44);
+    btn.frame = CGRectMake(0, 80, 150, 44);
     [self.view addSubview:btn];
     
     
@@ -90,8 +155,19 @@ static MMKV *mm;
     btn.backgroundColor = [UIColor orangeColor];
     [btn setTitle:@"removeFirstData" forState:UIControlStateNormal];
     [btn addTarget:self action:@selector(removeFirstData) forControlEvents:UIControlEventTouchUpInside];
-    btn.frame = CGRectMake(0, 160, 100, 44);
+    btn.frame = CGRectMake(0, 160, 150, 44);
     [self.view addSubview:btn];
+    
+    btn = [UIButton buttonWithType:UIButtonTypeCustom];
+    btn.backgroundColor = [UIColor orangeColor];
+    [btn setTitle:@"addMostDataAsync" forState:UIControlStateNormal];
+    [btn addTarget:self action:@selector(addMostDataAsync) forControlEvents:UIControlEventTouchUpInside];
+    btn.frame = CGRectMake(0, 240, 150, 44);
+    [self.view addSubview:btn];
+    
+    UISwitch *switchView = [[UISwitch alloc]init];
+    switchView.frame = CGRectMake(280, 60, 0, 0);
+    [self.view addSubview:switchView];
     
 //   NSString *path = [libraryPath stringByAppendingPathComponent:@"mmkv_2"];
 //    auto mmkv = [MMKV mmkvWithID:@"test/case1" relativePath:path];

@@ -42,7 +42,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)appendData:(NSData *)value;
 - (NSData *)getFirstData;
 - (NSArray <NSData *>*)getAllData;
-- (BOOL )removeFirstData;
+- (NSArray<NSData *> *)subarrayWithLength:(NSUInteger)length;
+- (BOOL)removeFirstData;
 
 - (size_t)count;
 
