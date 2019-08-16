@@ -70,7 +70,7 @@ NS_ASSUME_NONNULL_BEGIN
 // unless you care about out of battery
 - (void)sync;
 - (void)async;
-
+- (BOOL)canAppendData:(NSData *)value;
 NS_ASSUME_NONNULL_END
 
 @end

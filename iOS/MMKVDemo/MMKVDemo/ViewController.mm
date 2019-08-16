@@ -24,47 +24,100 @@
 #import <sys/xattr.h>
 
 @interface ViewController () <MMKVHandler>
+@property (atomic, strong) MMKV *mm;
 @end
+
 
 @implementation ViewController {
 	NSMutableArray *m_arrStrings;
 	NSMutableArray *m_arrStrKeys;
 	NSMutableArray *m_arrIntKeys;
-
+    NSMutableArray *m_arrData;
+    dispatch_queue_t queue;
 	int m_loops;
 }
-static MMKV *mm;
 - (void)addOneData
 {
     static int num = 0;
     NSData *data = [[NSString stringWithFormat:@"hello World 2019年，阿里前端已经诞生了14年。在我们携手走过的这14年里，从攻克兼容到引领无线时代，从工程化到全栈化，重塑中后台，挺进智能化，创新、开放、重塑、定义未来是我们的代名词。我们拥有共同的使命愿景，链接商业，让数字世界触手可及！我们每一个人都是 Alibaba F2E 的代言人！ 为了能够让阿里巴巴经济体内的前端开发都能够有一个聚一聚的机会，我们筹备了阿里巴巴经济体前端大会。这次让我们阿里前端聚… %d",num] dataUsingEncoding:NSUTF8StringEncoding];
     NSLog(@"%lu",data.length);
-    [mm appendData:data];
+    [self.mm appendData:data];
     num ++;
-    NSLog(@"mm的size %lu %lu",mm.totalSize,mm.actualSize);
-    [mm sync];
+    NSLog(@"mm的size %lu %lu",self.mm.totalSize,self.mm.actualSize);
 }
 
 - (void)addMostDataAsync
 {
     static int num = 0;
-    for (int i = 0; i<10000; i++) {
-        dispatch_async(dispatch_get_global_queue(0, 0), ^{
+    
+    dispatch_async(queue, ^{
+        CFAbsoluteTime startTime =CFAbsoluteTimeGetCurrent();
+        for (int i = 0; i<1000; i++) {
             
-            NSData *data = [[NSString stringWithFormat:@"hello World 2019年，阿里前端已经诞生了14年。在我们携手走过的这14年里，从攻克兼容到引领无线时代，从工程化到全栈化，重塑中后台，挺进智能化，创新、开放、重塑、定义未来是我们的代名词。我们拥有共同的使命愿景，链接商业，让数字世界触手可及！我们每一个人都是 Alibaba F2E 的代言人！ 为了能够让阿里巴巴经济体内的前端开发都能够有一个聚一聚的机会，我们筹备了阿里巴巴经济体前端大会。这次让我们阿里前端聚… %d",num] dataUsingEncoding:NSUTF8StringEncoding];
+                NSData *data = [[NSString stringWithFormat:@"hello World  lognum == %d",num] dataUsingEncoding:NSUTF8StringEncoding];
+        
+                if (![self.mm canAppendData:data]) {
+                    [m_arrData addObject:data];
+                    NSLog(@"==============================需要换文件");
+                    [self.mm close];
+                    self.mm = nil;
+                    self.mm = [MMKV mmkvWithID:[NSString stringWithFormat:@"test-%d",num] cryptKey:nil relativePath:nil];
+                    NSLog(@"==============================换文件成功");
+                    
+                } else {
+                    [self.mm appendData:data];
+                    NSLog(@"writdata: mm的size %lu %lu",self.mm.totalSize,self.mm.actualSize);
+                }
+                num ++;
+        }
+        
+        CFAbsoluteTime linkTime = (CFAbsoluteTimeGetCurrent() - startTime);
+        NSLog(@"Linked in %f ms", linkTime *1000.0);
+    });
+}
+
+- (void)addMostDataAsyncFile
+{
+    static int num = 0;
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
+    NSString *libraryPath = (NSString *) [paths firstObject];
+    NSString *rootDir = [libraryPath stringByAppendingPathComponent:@"file"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:rootDir withIntermediateDirectories:YES attributes:nil error:nil];
+    dispatch_async(queue, ^{
+        CFAbsoluteTime startTime =CFAbsoluteTimeGetCurrent();
+        for (int i = 0; i<1000; i++) {
             
-            [mm appendData:data];
+            NSData *data = [[NSString stringWithFormat:@"hello World  lognum == %d",num] dataUsingEncoding:NSUTF8StringEncoding];
             
+            [m_arrData addObject:data];
+            if (m_arrData.count > 90) {
+                [m_arrData writeToFile:[rootDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%d",num]] atomically:YES];
+                [m_arrData removeAllObjects];
+            }
+            
+//            if (![self.mm canAppendData:data]) {
+//                [m_arrData addObject:data];
+//                NSLog(@"==============================需要换文件");
+//                [self.mm close];
+//                self.mm = nil;
+//                self.mm = [MMKV mmkvWithID:[NSString stringWithFormat:@"test-%d",num] cryptKey:nil relativePath:nil];
+//                NSLog(@"==============================换文件成功");
+//
+//            } else {
+//                [self.mm appendData:data];
+//                NSLog(@"writdata: mm的size %lu %lu",self.mm.totalSize,self.mm.actualSize);
+//            }
             num ++;
-            NSLog(@"writdata: mm的size %lu %lu",mm.totalSize,mm.actualSize);
-        });
-    }
+        }
+        CFAbsoluteTime linkTime = (CFAbsoluteTimeGetCurrent() - startTime);
+        NSLog(@"Linked in %f ms", linkTime *1000.0);
+    });
 }
 
 - (void)getAllData
 {
-    dispatch_async(dispatch_get_global_queue(0, 0), ^{
-        NSArray *datas = [mm getAllData];
+    dispatch_async(queue, ^{
+        NSArray *datas = [self.mm getAllData];
         for (NSData *data in datas) {
             
             NSLog(@"getalldata: dataSize %lu == %@ ",data.length,[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
@@ -74,43 +127,13 @@ static MMKV *mm;
 
 - (void)removeFirstData
 {
-    [mm removeFirstData];
-}
-
-- (void)addExtendedAttributeWithName:(NSString *)attrName num:(NSUInteger)num filePath:(NSString *)filePath
-{
-    const char *path = [filePath UTF8String];
-    const char *name = [attrName UTF8String];
-    
-    int result = setxattr(path, name, (void *)num, 0, 0, 0);
-    
-    if (result < 0) {
-        NSLog(@"FileInfo: setxattr(%@, %@): error = %s",
-              attrName,
-              filePath,
-              strerror(errno));
-    }
-}
-
-- (NSUInteger)removeExtendedAttributeWithName:(NSString *)attrName filePath:(NSString *)filePath
-{
-    const char *path = [filePath UTF8String];
-    const char *name = [attrName UTF8String];
-    NSUInteger num = 0;
-    ssize_t result = getxattr(path, name, &num, 0, 0, 0);
-    
-    if (result < 0 && errno != ENOATTR) {
-        NSLog(@"DDLogFileInfo: removexattr(%@, %@): error = %s",
-              attrName,
-              filePath,
-              strerror(errno));
-    }
-    return num;
+    [self.mm removeFirstData];
 }
 
 - (void)viewDidLoad {
 	[super viewDidLoad];
-
+    m_arrData = [NSMutableArray array];
+    queue = dispatch_queue_create("nnn", NULL);
 	// not necessary: set MMKV's root dir
 	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
 	NSString *libraryPath = (NSString *) [paths firstObject];
@@ -118,21 +141,9 @@ static MMKV *mm;
 		NSString *rootDir = [libraryPath stringByAppendingPathComponent:@"mmkv"];
 		[MMKV setMMKVBasePath:rootDir];
         
-        if ([[NSFileManager defaultManager] setAttributes:@{@"elementNum":@(3)} ofItemAtPath:[rootDir stringByAppendingPathComponent:@"test"] error:nil]) {
-            
-            NSDictionary *dic = [[NSFileManager defaultManager] attributesOfItemAtPath:[rootDir stringByAppendingPathComponent:@"test"] error:nil];
-            NSLog(@"dic %@",dic);
-            NSLog(@"filesize %llu",[[dic objectForKey:NSFileSize] unsignedLongLongValue]);
-            NSLog(@"num %llu",[[dic objectForKey:@"elementNum"] unsignedLongLongValue]);
-        }
-        [self addExtendedAttributeWithName:@"elementNum" num:3 filePath:[rootDir stringByAppendingPathComponent:@"test"]];
-        
-        
-        NSLog(@"==== %lu",[self removeExtendedAttributeWithName:@"elementNum" filePath:[rootDir stringByAppendingPathComponent:@"test"]]);
-        
         
 	}
-    mm = [MMKV mmkvWithID:@"test" cryptKey:nil relativePath:nil];
+    self.mm = [MMKV mmkvWithID:@"test-588" cryptKey:nil relativePath:nil];
    
     
     
@@ -163,6 +174,13 @@ static MMKV *mm;
     [btn setTitle:@"addMostDataAsync" forState:UIControlStateNormal];
     [btn addTarget:self action:@selector(addMostDataAsync) forControlEvents:UIControlEventTouchUpInside];
     btn.frame = CGRectMake(0, 240, 150, 44);
+    [self.view addSubview:btn];
+    
+    btn = [UIButton buttonWithType:UIButtonTypeCustom];
+    btn.backgroundColor = [UIColor orangeColor];
+    [btn setTitle:@"addMostDataAsyncFile" forState:UIControlStateNormal];
+    [btn addTarget:self action:@selector(addMostDataAsyncFile) forControlEvents:UIControlEventTouchUpInside];
+    btn.frame = CGRectMake(0, 290, 150, 44);
     [self.view addSubview:btn];
     
     UISwitch *switchView = [[UISwitch alloc]init];

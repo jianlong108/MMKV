@@ -19,7 +19,6 @@
  */
 
 #import "MMKV.h"
-//#import "AESCrypt.h"
 #import "MemoryFile.h"
 #import "MiniCodedInputData.h"
 #import "MiniCodedOutputData.h"
@@ -31,7 +30,6 @@
 #import <UIKit/UIKit.h>
 #endif
 
-//#import <algorithm>
 #import <sys/mman.h>
 #import <sys/stat.h>
 #import <unistd.h>
@@ -61,6 +59,7 @@ int DEFAULT_MMAP_SIZE;
 
 	BOOL m_isInBackground;
 	BOOL m_needLoadFromFile;
+    BOOL m_needLoadFileToMemory;
 	BOOL m_hasFullWriteBack;
 
 }
@@ -108,22 +107,22 @@ int DEFAULT_MMAP_SIZE;
 
 		m_mmapID = kvKey;
 		m_path = path;
-
+        m_needLoadFileToMemory = YES;
 		[self loadFromFile];
 
-#ifdef __IPHONE_OS_VERSION_MIN_REQUIRED
-		auto appState = [UIApplication sharedApplication].applicationState;
-		if (appState == UIApplicationStateBackground) {
-			m_isInBackground = YES;
-		} else {
-			m_isInBackground = NO;
-		}
-		NSLog(@"m_isInBackground:%d, appState:%ld", m_isInBackground, (long) appState);
-
-		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onMemoryWarning) name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
-		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(didEnterBackground) name:UIApplicationDidEnterBackgroundNotification object:nil];
-		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(didBecomeActive) name:UIApplicationDidBecomeActiveNotification object:nil];
-#endif
+//#ifdef __IPHONE_OS_VERSION_MIN_REQUIRED
+//        auto appState = [UIApplication sharedApplication].applicationState;
+//        if (appState == UIApplicationStateBackground) {
+//            m_isInBackground = YES;
+//        } else {
+//            m_isInBackground = NO;
+//        }
+//        NSLog(@"m_isInBackground:%d, appState:%ld", m_isInBackground, (long) appState);
+//
+//        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onMemoryWarning) name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
+//        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(didEnterBackground) name:UIApplicationDidEnterBackgroundNotification object:nil];
+//        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(didBecomeActive) name:UIApplicationDidBecomeActiveNotification object:nil];
+//#endif
 	}
 	return self;
 }
@@ -185,6 +184,40 @@ int DEFAULT_MMAP_SIZE;
 //
 //    return tmp;
 //}
+- (void)_loadElementNumAndSize
+{
+    m_fd = open(m_path.UTF8String, O_RDWR, S_IRWXU);
+    if (m_fd < 0) {
+        NSLog(@"fail to open:%@, %s", m_path, strerror(errno));
+    }
+    m_size = 0;
+    struct stat st = {};
+    if (fstat(m_fd, &st) != -1) {
+        m_size = (size_t) st.st_size;
+    }
+    // round up to (n * pagesize)
+    if (m_size < DEFAULT_MMAP_SIZE || (m_size % DEFAULT_MMAP_SIZE != 0)) {
+        m_size = ((m_size / DEFAULT_MMAP_SIZE) + 1) * DEFAULT_MMAP_SIZE;
+        if (ftruncate(m_fd, m_size) != 0) {
+            NSLog(@"fail to truncate [%@] to size %zu, %s", m_mmapID, m_size, strerror(errno));
+            m_size = (size_t) st.st_size;
+            return;
+        }
+    }
+    m_ptr = (char *) mmap(nullptr, m_size, PROT_READ | PROT_WRITE, MAP_SHARED, m_fd, 0);
+    if (m_ptr == MAP_FAILED) {
+        NSLog(@"fail to mmap [%@], %s", m_mmapID, strerror(errno));
+    } else {
+        const int offset = pbFixed32Size(0);
+        NSData *lenBuffer = [NSData dataWithBytesNoCopy:m_ptr length:offset freeWhenDone:NO];
+        @try {
+            m_actualSize = MiniCodedInputData(lenBuffer).readFixed32();
+        } @catch (NSException *exception) {
+            NSLog(@"%@", exception);
+        }
+        NSLog(@"loading [%@] with %zu size in total, file size is %zu", m_mmapID, m_actualSize, m_size);
+    }
+}
 
 
 - (void)loadFromFile {
@@ -278,8 +311,8 @@ int DEFAULT_MMAP_SIZE;
                     needFullWriteback = true;
 				}
 				if (loadFromFile) {
-                    NSData *inputBuffer = [NSData dataWithBytesNoCopy:m_ptr + offset length:m_actualSize freeWhenDone:NO];
-                    m_arr = [MiniPBCoder decodeContainerOfClass:NSMutableArray.class withValueClass:NSData.class fromData:inputBuffer];
+//                    NSData *inputBuffer = [NSData dataWithBytesNoCopy:m_ptr + offset length:m_actualSize freeWhenDone:NO];
+//                    m_arr = [MiniPBCoder decodeContainerOfClass:NSMutableArray.class withValueClass:NSData.class fromData:inputBuffer];
 					m_output = new MiniCodedOutputData(m_ptr + offset + m_actualSize, m_size - offset - m_actualSize);
 					if (needFullWriteback) {
 						[self fullWriteBack];
@@ -315,6 +348,28 @@ int DEFAULT_MMAP_SIZE;
 	[self loadFromFile];
 }
 
+- (void)lodaDataFromFileToMemory
+{
+    if (m_needLoadFileToMemory == NO) {
+        return;
+    }
+    [self checkLoadData];
+    int offset = pbDoubleSize(0);
+    NSData *inputBuffer = [NSData dataWithBytesNoCopy:m_ptr + offset length:m_actualSize freeWhenDone:NO];
+    m_arr = [MiniPBCoder decodeContainerOfClass:NSMutableArray.class withValueClass:NSData.class fromData:inputBuffer];
+    m_needLoadFileToMemory = NO;
+}
+
+- (BOOL)canAppendData:(NSData *)value
+{
+    if (value == nil) {
+        return NO;
+    }
+    if (![self isFileValid]) {
+        return NO;
+    }
+    return value.length + pbRawVarint32Size((int32_t) value.length) <= m_output->spaceLeft();
+}
 - (BOOL)appendData:(NSData *)value
 {
     if (value == nil) {
@@ -324,7 +379,6 @@ int DEFAULT_MMAP_SIZE;
     NSData *data;
     if ([MiniPBCoder isMiniPBCoderCompatibleObject:value]) {
         data = [MiniPBCoder encodeDataWithObject:value];
-        NSLog(@"可以初始化为pb");
     } else
     {
         /*if ([object conformsToProtocol:@protocol(NSCoding)])*/ {
@@ -343,7 +397,8 @@ int DEFAULT_MMAP_SIZE;
 - (NSArray<NSData *> *)subarrayWithLength:(NSUInteger)length
 {
     CScopedLock lock(m_lock);
-    [self checkLoadData];
+    [self lodaDataFromFileToMemory];
+    
     if (length > m_arr.count) {
         NSLog(@"lenght too large = %lu, arr.count = %lu",length,m_arr.count);
         return nil;
@@ -351,11 +406,16 @@ int DEFAULT_MMAP_SIZE;
     NSArray *subarray = [m_arr subarrayWithRange:NSMakeRange(0, length)];
     NSMutableArray *data_m = [NSMutableArray array];
     for (NSData *data in subarray) {
-        
+
         if (data.length > 0) {
             if ([MiniPBCoder isMiniPBCoderCompatibleType:[NSData class]]) {
                 NSData *dataCoder = [MiniPBCoder decodeObjectOfClass:[NSData class] fromData:data];
-                [data_m addObject:dataCoder];
+                if (dataCoder) {
+                    [data_m addObject:dataCoder];
+                } else {
+                    [data_m addObject:data];
+                }
+                
             } else {
                 if ([[NSData class] conformsToProtocol:@protocol(NSCoding)]) {
                     NSData *dataCoder =  [NSKeyedUnarchiver unarchiveObjectWithData:data];
@@ -363,7 +423,7 @@ int DEFAULT_MMAP_SIZE;
                 }
             }
         }
-        
+
     }
     return data_m.copy;
 }
@@ -487,7 +547,7 @@ int DEFAULT_MMAP_SIZE;
 
 	[g_instanceDic removeObjectForKey:m_mmapID];
 }
-
+/*
 - (void)trim {
 	CScopedLock lock(m_lock);
 	NSLog(@"prepare to trim %@", m_mmapID);
@@ -528,12 +588,12 @@ int DEFAULT_MMAP_SIZE;
 	}
 
 	delete m_output;
-	m_output = new MiniCodedOutputData(m_ptr + pbFixed32Size(0), m_size - pbFixed32Size(0));
+	m_output = new MiniCodedOutputData(m_ptr + pbDoubleSize(0), m_size - pbDoubleSize(0));
 	m_output->seek(m_actualSize);
 
 	NSLog(@"finish trim %@ to size %zu", m_mmapID, m_size);
 }
-
+*/
 - (BOOL)protectFromBackgroundWriting:(size_t)size writeBlock:(void (^)(MiniCodedOutputData *output))block {
 	if (m_isInBackground) {
 		static const int offset = pbDoubleSize(0);
@@ -579,19 +639,21 @@ int DEFAULT_MMAP_SIZE;
 
 	// make some room for placeholder
 	constexpr uint32_t /*ItemSizeHolder = 0x00ffffff,*/ ItemSizeHolderSize = 8;
-	if (m_arr.count == 0) {
+	if (m_elementNum == 0) {
 		newSize += ItemSizeHolderSize;
 	}
-	if (newSize >= m_output->spaceLeft() || m_arr.count == 0) {
+    if (newSize >= m_output->spaceLeft()) return NO;
+	if (/*newSize >= m_output->spaceLeft() ||*/ m_elementNum == 0) {
 		// try a full rewrite to make space
 		static const int offset = pbDoubleSize(0);
         //优化
         NSData *data = [MiniPBCoder encodeDataWithObject:m_arr];
-		size_t lenNeeded = data.length + offset + newSize;
-		size_t avgItemSize = lenNeeded / std::max<size_t>(1, m_arr.count);
-		size_t futureUsage = avgItemSize * std::max<size_t>(8, m_arr.count / 2);
+//        size_t lenNeeded = data.length + offset + newSize;
+//        size_t avgItemSize = lenNeeded / std::max<size_t>(1, m_arr.count);
+//        size_t futureUsage = avgItemSize * std::max<size_t>(8, m_arr.count / 2);
 		// 1. no space for a full rewrite, double it
 		// 2. or space is not large enough for future usage, double it to avoid frequently full rewrite
+        /*
 		if (lenNeeded >= m_size || (lenNeeded + futureUsage) >= m_size) {
 			size_t oldSize = m_size;
 			do {
@@ -625,11 +687,11 @@ int DEFAULT_MMAP_SIZE;
 			m_output = new MiniCodedOutputData(m_ptr + offset, m_size - offset);
 			m_output->seek(m_actualSize);
 		}
-
+*/
 		if ([self writeActualSize:data.length] == NO) {
 			return NO;
 		}
-        if ([self writeElementNum:m_arr.count] == NO) {
+        if ([self writeElementNum:m_elementNum] == NO) {
             return NO;
         }
 		delete m_output;
@@ -641,6 +703,7 @@ int DEFAULT_MMAP_SIZE;
 		return ret;
 	}
 	return YES;
+     
 }
 
 - (BOOL)writeElementNum:(size_t)num {
@@ -721,7 +784,7 @@ int DEFAULT_MMAP_SIZE;
 
 	auto ret = [self appendData:data forKey:key];
 	if (ret) {
-        [m_arr addObject:data];
+//        [m_arr addObject:data];
 		m_hasFullWriteBack = NO;
 	}
 	return ret;
@@ -759,7 +822,7 @@ int DEFAULT_MMAP_SIZE;
 		return NO;
 	}
 
-	if (m_arr.count == 0) {
+	if (m_elementNum == 0) {
 		[self clearAll];
 		return YES;
 	}
@@ -784,7 +847,9 @@ int DEFAULT_MMAP_SIZE;
 			return ret;
 		} else {
 			// ensureMemorySize will extend file & full rewrite, no need to write back again
-			return [self ensureMemorySize:allData.length + offset - m_size];
+            // 当前文件的容量不足时,就放弃读写
+//            return [self ensureMemorySize:allData.length + offset - m_size];
+            return NO;
 		}
 	}
 	return NO;
