@@ -184,41 +184,6 @@ int DEFAULT_MMAP_SIZE;
 //
 //    return tmp;
 //}
-- (void)_loadElementNumAndSize
-{
-    m_fd = open(m_path.UTF8String, O_RDWR, S_IRWXU);
-    if (m_fd < 0) {
-        NSLog(@"fail to open:%@, %s", m_path, strerror(errno));
-    }
-    m_size = 0;
-    struct stat st = {};
-    if (fstat(m_fd, &st) != -1) {
-        m_size = (size_t) st.st_size;
-    }
-    // round up to (n * pagesize)
-    if (m_size < DEFAULT_MMAP_SIZE || (m_size % DEFAULT_MMAP_SIZE != 0)) {
-        m_size = ((m_size / DEFAULT_MMAP_SIZE) + 1) * DEFAULT_MMAP_SIZE;
-        if (ftruncate(m_fd, m_size) != 0) {
-            NSLog(@"fail to truncate [%@] to size %zu, %s", m_mmapID, m_size, strerror(errno));
-            m_size = (size_t) st.st_size;
-            return;
-        }
-    }
-    m_ptr = (char *) mmap(nullptr, m_size, PROT_READ | PROT_WRITE, MAP_SHARED, m_fd, 0);
-    if (m_ptr == MAP_FAILED) {
-        NSLog(@"fail to mmap [%@], %s", m_mmapID, strerror(errno));
-    } else {
-        const int offset = pbFixed32Size(0);
-        NSData *lenBuffer = [NSData dataWithBytesNoCopy:m_ptr length:offset freeWhenDone:NO];
-        @try {
-            m_actualSize = MiniCodedInputData(lenBuffer).readFixed32();
-        } @catch (NSException *exception) {
-            NSLog(@"%@", exception);
-        }
-        NSLog(@"loading [%@] with %zu size in total, file size is %zu", m_mmapID, m_actualSize, m_size);
-    }
-}
-
 
 - (void)loadFromFile {
     /**
@@ -822,7 +787,7 @@ int DEFAULT_MMAP_SIZE;
 		return NO;
 	}
 
-	if (m_elementNum == 0) {
+	if (m_arr.count == 0) {
 		[self clearAll];
 		return YES;
 	}
