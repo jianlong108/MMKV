@@ -21,119 +21,94 @@
 #import "ViewController.h"
 #import "MMKVDemo-Swift.h"
 #import <MMKV/MMKV.h>
+#import <MMKV/MemoryFile.h>
+
 
 @interface ViewController () <MMKVHandler>
+
 @end
 
 @implementation ViewController {
 	NSMutableArray *m_arrStrings;
 	NSMutableArray *m_arrStrKeys;
 	NSMutableArray *m_arrIntKeys;
-
+    MemoryFile *m_cacheMMFile;
 	int m_loops;
 }
 
 - (void)viewDidLoad {
 	[super viewDidLoad];
 
-	// set log level
-	[MMKV setLogLevel:MMKVLogInfo];
-
-	// you can turn off logging
-	//[MMKV setLogLevel:MMKVLogNone];
-
-	// register handler
-	[MMKV registerHandler:self];
-
-	// not necessary: set MMKV's root dir
 	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
 	NSString *libraryPath = (NSString *) [paths firstObject];
-	if ([libraryPath length] > 0) {
-		NSString *rootDir = [libraryPath stringByAppendingPathComponent:@"mmkv"];
-		[MMKV setMMKVBasePath:rootDir];
-	}
     
-   NSString *path = [libraryPath stringByAppendingPathComponent:@"mmkv_2"];
-    auto mmkv = [MMKV mmkvWithID:@"test/case1" relativePath:path];
-//    [[MMKV defaultMMKV] setString:@"hello mmkv" forKey:@"string"];
-//    [mmkv setString:@"hello mmkv test/case1" forKey:@"string"];
-//    NSLog(@"string:%@", [[MMKV defaultMMKV] getStringForKey:@"string"]);
-    NSLog(@"test/case1:%@", [mmkv getStringForKey:@"string"]);
-//    [self funcionalTest];
-//	[self testReKey];
-	//[self testImportFromUserDefault];
-	//[self testCornerSize];
-	//[self testFastRemoveCornerSize];
-
-//	DemoSwiftUsage *swiftUsageDemo = [[DemoSwiftUsage alloc] init];
-//	[swiftUsageDemo testSwiftFunctionality];
-//
-//	m_loops = 10000;
-//	m_arrStrings = [NSMutableArray arrayWithCapacity:m_loops];
-//	m_arrStrKeys = [NSMutableArray arrayWithCapacity:m_loops];
-//	m_arrIntKeys = [NSMutableArray arrayWithCapacity:m_loops];
-//	for (size_t index = 0; index < m_loops; index++) {
-//		NSString *str = [NSString stringWithFormat:@"%s-%d", __FILE__, rand()];
-//		[m_arrStrings addObject:str];
-//
-//		NSString *strKey = [NSString stringWithFormat:@"str-%zu", index];
-//		[m_arrStrKeys addObject:strKey];
-//
-//		NSString *intKey = [NSString stringWithFormat:@"int-%zu", index];
-//		[m_arrIntKeys addObject:intKey];
-//	}
+    
 }
 
-- (void)funcionalTest {
-	auto path = [MMKV mmkvBasePath];
-	path = [path stringByDeletingLastPathComponent];
-	path = [path stringByAppendingPathComponent:@"mmkv_2"];
-	auto mmkv = [MMKV mmkvWithID:@"test/case1" relativePath:path];
-
-    [mmkv setBool:YES forKey:@"bool"];
-	NSLog(@"bool:%d", [mmkv getBoolForKey:@"bool"]);
-
-    [mmkv setInt32:-1024 forKey:@"int32"];
-	NSLog(@"int32:%d", [mmkv getInt32ForKey:@"int32"]);
-
-	[mmkv setUInt32:std::numeric_limits<uint32_t>::max() forKey:@"uint32"];
-	NSLog(@"uint32:%u", [mmkv getUInt32ForKey:@"uint32"]);
-
-	[mmkv setInt64:std::numeric_limits<int64_t>::min() forKey:@"int64"];
-	NSLog(@"int64:%lld", [mmkv getInt64ForKey:@"int64"]);
-
-	[mmkv setUInt64:std::numeric_limits<uint64_t>::max() forKey:@"uint64"];
-	NSLog(@"uint64:%llu", [mmkv getInt64ForKey:@"uint64"]);
-
-	[mmkv setFloat:-3.1415926 forKey:@"float"];
-	NSLog(@"float:%f", [mmkv getFloatForKey:@"float"]);
-
-	[mmkv setDouble:std::numeric_limits<double>::max() forKey:@"double"];
-	NSLog(@"double:%f", [mmkv getDoubleForKey:@"double"]);
-
-	[mmkv setString:@"hello, mmkv" forKey:@"string"];
-	NSLog(@"string:%@", [mmkv getStringForKey:@"string"]);
-
-	[mmkv setObject:nil forKey:@"string"];
-	NSLog(@"string after set nil:%@, containsKey:%d",
-	      [mmkv getObjectOfClass:NSString.class
-	                      forKey:@"string"],
-	      [mmkv containsKey:@"string"]);
-
-	[mmkv setDate:[NSDate date] forKey:@"date"];
-	NSLog(@"date:%@", [mmkv getDateForKey:@"date"]);
-
-	[mmkv setData:[@"hello, mmkv again and again" dataUsingEncoding:NSUTF8StringEncoding] forKey:@"data"];
-	NSData *data = [mmkv getDataForKey:@"data"];
-	NSLog(@"data:%@", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
-	NSLog(@"data length:%zu, value size consumption:%zu", data.length, [mmkv getValueSizeForKey:@"data"]);
-
-	[mmkv removeValueForKey:@"bool"];
-	NSLog(@"bool:%d", [mmkv getBoolForKey:@"bool"]);
-
-	[mmkv close];
+- (nullable MemoryFile *)_mmFileWithLevelStr:(NSString *)levelStr logData:(NSData *)data
+{
+    NSString *path = [levelStr stringByAppendingPathComponent:[NSString stringWithFormat:@"%.0f", [[NSDate date] timeIntervalSince1970] * 1000]];
+    if (!m_cacheMMFile) {
+        m_cacheMMFile = new MemoryFile(path);
+    }
+    if (m_cacheMMFile->getFileSize() > 32 * 1024) {
+        m_cacheMMFile = new MemoryFile(path);
+    }
+//    if ([cacheMMFile canAppendData:data]) return cacheMMFile;
+//
+//    NSString *rootPath = self.sdkDirPath;
+//    if ([[AMapLogFileManager shareFileManager] directoryIsExist:levelStr relativePath:rootPath]) {
+//
+//        NSArray <NSString *>*contents =[self _getCacheContentsWithLevelStr:levelStr];
+//
+//        NSString *fileRelativePath = [rootPath stringByAppendingPathComponent:levelStr];
+//        if (contents.count == 0) {
+//            NSString *filename = GetStringFromTimeInterval();
+//            NSString *fileAbsolutePath = [fileRelativePath stringByAppendingPathComponent:filename];
+//
+//            if (![[AMapLogFileManager shareFileManager] creatFileWithAbsolutePath:fileAbsolutePath]) return nil;
+//
+//            cacheMMFile = [AMapMemoryFile memoryFileWithFileName:filename absolutePath:fileAbsolutePath];
+//            if (cacheMMFile) {
+//                [self.mmapFiles setObject:cacheMMFile forKey:levelStr];
+//            }
+//        } else {
+//            NSString *newestFileName = contents.lastObject;
+//            NSString *fileAbsolutePath = [fileRelativePath stringByAppendingPathComponent:newestFileName];
+//            cacheMMFile = [AMapMemoryFile memoryFileWithFileName:newestFileName absolutePath:fileAbsolutePath];
+//            if (![cacheMMFile canAppendData:data]) {
+//                [cacheMMFile close];
+//                newestFileName = GetStringFromTimeInterval();
+//                fileAbsolutePath = [fileRelativePath stringByAppendingPathComponent:newestFileName];
+//
+//                if (![[AMapLogFileManager shareFileManager] creatFileWithAbsolutePath:fileAbsolutePath]) return nil;
+//
+//                cacheMMFile = [AMapMemoryFile memoryFileWithFileName:newestFileName absolutePath:fileAbsolutePath];
+//            }
+//            if (cacheMMFile) {
+//                [self.mmapFiles setObject:cacheMMFile forKey:levelStr];
+//            }
+//        }
+//    } else {
+//        NSError *error;
+//        BOOL success = [[AMapLogFileManager shareFileManager] creatLogDirectory:levelStr relativePath:rootPath error:&error];
+//        if (!success || error) {
+//            return nil;
+//        }
+//        NSString *fileRelativePath = [rootPath stringByAppendingPathComponent:levelStr];
+//        NSString *filename = GetStringFromTimeInterval();
+//        NSString *fileAbsolutePath = [fileRelativePath stringByAppendingPathComponent:filename];
+//
+//        if (![[AMapLogFileManager shareFileManager] creatFileWithAbsolutePath:fileAbsolutePath]) return nil;
+//
+//        cacheMMFile = [AMapMemoryFile memoryFileWithFileName:filename absolutePath:fileAbsolutePath];
+//        if (cacheMMFile) {
+//            [self.mmapFiles setObject:cacheMMFile forKey:levelStr];
+//        }
+//
+//    }
+//    return cacheMMFile;
 }
-
 - (void)testCornerSize {
 	auto mmkv = [MMKV mmkvWithID:@"test/cornerSize" cryptKey:[@"crypt" dataUsingEncoding:NSUTF8StringEncoding]];
 	[mmkv clearAll];
