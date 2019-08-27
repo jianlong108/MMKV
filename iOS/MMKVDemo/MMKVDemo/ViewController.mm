@@ -22,6 +22,7 @@
 #import "MMKVDemo-Swift.h"
 #import <MMKV/MMKV.h>
 #import <sys/xattr.h>
+#import <mach/mach_time.h>
 
 @interface ViewController () <MMKVHandler>
 @property (atomic, strong) MMKV *mm;
@@ -32,7 +33,8 @@
 	NSMutableArray *m_arrStrings;
 	NSMutableArray *m_arrStrKeys;
 	NSMutableArray *m_arrIntKeys;
-    NSMutableArray *m_arrData;
+    NSMutableArray *m_mmFiles;
+    NSMutableData *m_cachePool;
     dispatch_queue_t queue;
 	int m_loops;
 }
@@ -45,19 +47,29 @@
     num ++;
     NSLog(@"mm的size %lu %lu",self.mm.totalSize,self.mm.actualSize);
 }
-
+CGFloat LogTimeBlock (void (^block)(void)) {
+    mach_timebase_info_data_t info;
+    if (mach_timebase_info(&info) != KERN_SUCCESS) return -1.0;
+    
+    uint64_t start = mach_absolute_time ();
+    block ();
+    uint64_t end = mach_absolute_time ();
+    uint64_t elapsed = end - start;
+    
+    uint64_t nanos = elapsed * info.numer / info.denom;
+    return (CGFloat)nanos / NSEC_PER_SEC;
+}
 - (void)addMostDataAsync
 {
     static int num = 0;
     
     dispatch_async(queue, ^{
-        CFAbsoluteTime startTime =CFAbsoluteTimeGetCurrent();
-        for (int i = 0; i<1000; i++) {
-            
+        CGFloat time = LogTimeBlock(^{
+            for (int i = 0; i<1000; i++) {
+                
                 NSData *data = [[NSString stringWithFormat:@"hello World  lognum == %d",num] dataUsingEncoding:NSUTF8StringEncoding];
-        
+                
                 if (![self.mm canAppendData:data]) {
-                    [m_arrData addObject:data];
                     NSLog(@"==============================需要换文件");
                     [self.mm close];
                     self.mm = nil;
@@ -69,49 +81,39 @@
                     NSLog(@"writdata: mm的size %lu %lu",self.mm.totalSize,self.mm.actualSize);
                 }
                 num ++;
-        }
-        
-        CFAbsoluteTime linkTime = (CFAbsoluteTimeGetCurrent() - startTime);
-        NSLog(@"Linked in %f ms", linkTime *1000.0);
+            }
+        });
+        NSLog(@"ProcessFile writeFile %@ms", @(time*1000));
     });
 }
 
 - (void)addMostDataAsyncFile
 {
-    static int num = 0;
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
     NSString *libraryPath = (NSString *) [paths firstObject];
     NSString *rootDir = [libraryPath stringByAppendingPathComponent:@"file"];
     [[NSFileManager defaultManager] createDirectoryAtPath:rootDir withIntermediateDirectories:YES attributes:nil error:nil];
     dispatch_async(queue, ^{
-        CFAbsoluteTime startTime =CFAbsoluteTimeGetCurrent();
-        for (int i = 0; i<1000; i++) {
-            
-            NSData *data = [[NSString stringWithFormat:@"hello World  lognum == %d",num] dataUsingEncoding:NSUTF8StringEncoding];
-            
-            [m_arrData addObject:data];
-            if (m_arrData.count > 90) {
-                [m_arrData writeToFile:[rootDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%d",num]] atomically:YES];
-                [m_arrData removeAllObjects];
+        CGFloat time = LogTimeBlock(^{
+            for (int i = 0; i<1000; i++) {
+                
+                NSData *data = [[NSString stringWithFormat:@"hello World  lognum == %d",i] dataUsingEncoding:NSUTF8StringEncoding];
+                
+                [m_cachePool appendData:data];
+                if (m_cachePool.length > 1024*4) {
+                    if ([m_cachePool writeToFile:[rootDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%d.txt",i]] atomically:YES]){
+                        [m_cachePool resetBytesInRange:NSMakeRange(0, m_cachePool.length)];
+                        m_cachePool.length = 0;
+                        NSLog(@"内存池满了");
+                    }
+                }
+                
             }
-            
-//            if (![self.mm canAppendData:data]) {
-//                [m_arrData addObject:data];
-//                NSLog(@"==============================需要换文件");
-//                [self.mm close];
-//                self.mm = nil;
-//                self.mm = [MMKV mmkvWithID:[NSString stringWithFormat:@"test-%d",num] cryptKey:nil relativePath:nil];
-//                NSLog(@"==============================换文件成功");
-//
-//            } else {
-//                [self.mm appendData:data];
-//                NSLog(@"writdata: mm的size %lu %lu",self.mm.totalSize,self.mm.actualSize);
-//            }
-            num ++;
-        }
-        CFAbsoluteTime linkTime = (CFAbsoluteTimeGetCurrent() - startTime);
-        NSLog(@"Linked in %f ms", linkTime *1000.0);
+            [m_cachePool writeToFile:[rootDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%d.txt",999]] atomically:YES];
+        });
+        NSLog(@"ProcessFile writeFile %@ms", @(time*1000));
     });
+    
 }
 
 - (void)getAllData
@@ -132,7 +134,8 @@
 
 - (void)viewDidLoad {
 	[super viewDidLoad];
-    m_arrData = [NSMutableArray array];
+    m_mmFiles = [NSMutableArray array];
+    m_cachePool = [NSMutableData data];
     queue = dispatch_queue_create("nnn", NULL);
 	// not necessary: set MMKV's root dir
 	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
@@ -173,14 +176,14 @@
     btn.backgroundColor = [UIColor orangeColor];
     [btn setTitle:@"addMostDataAsync" forState:UIControlStateNormal];
     [btn addTarget:self action:@selector(addMostDataAsync) forControlEvents:UIControlEventTouchUpInside];
-    btn.frame = CGRectMake(0, 240, 150, 44);
+    btn.frame = CGRectMake(0, 240, 350, 44);
     [self.view addSubview:btn];
     
     btn = [UIButton buttonWithType:UIButtonTypeCustom];
     btn.backgroundColor = [UIColor orangeColor];
     [btn setTitle:@"addMostDataAsyncFile" forState:UIControlStateNormal];
     [btn addTarget:self action:@selector(addMostDataAsyncFile) forControlEvents:UIControlEventTouchUpInside];
-    btn.frame = CGRectMake(0, 290, 150, 44);
+    btn.frame = CGRectMake(0, 290, 350, 44);
     [self.view addSubview:btn];
     
     UISwitch *switchView = [[UISwitch alloc]init];

@@ -71,7 +71,7 @@ int DEFAULT_MMAP_SIZE;
 		g_instanceDic = [NSMutableDictionary dictionary];
 		g_instanceLock = [[NSRecursiveLock alloc] init];
 
-		DEFAULT_MMAP_SIZE = getpagesize();
+		DEFAULT_MMAP_SIZE = getpagesize() * 2;
 		NSLog(@"pagesize:%d", DEFAULT_MMAP_SIZE);
 	}
 }
