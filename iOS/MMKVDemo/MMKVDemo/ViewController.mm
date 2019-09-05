@@ -47,6 +47,7 @@
     num ++;
     NSLog(@"mm的size %lu %lu",self.mm.totalSize,self.mm.actualSize);
 }
+
 CGFloat LogTimeBlock (void (^block)(void)) {
     mach_timebase_info_data_t info;
     if (mach_timebase_info(&info) != KERN_SUCCESS) return -1.0;
@@ -59,27 +60,28 @@ CGFloat LogTimeBlock (void (^block)(void)) {
     uint64_t nanos = elapsed * info.numer / info.denom;
     return (CGFloat)nanos / NSEC_PER_SEC;
 }
+
 - (void)addMostDataAsync
 {
     static int num = 0;
     
     dispatch_async(queue, ^{
         CGFloat time = LogTimeBlock(^{
-            for (int i = 0; i<1000; i++) {
+            for (int i = 0; i<10000; i++) {
                 
                 NSData *data = [[NSString stringWithFormat:@"hello World  lognum == %d",num] dataUsingEncoding:NSUTF8StringEncoding];
                 
-                if (![self.mm canAppendData:data]) {
-                    NSLog(@"==============================需要换文件");
-                    [self.mm close];
-                    self.mm = nil;
-                    self.mm = [MMKV mmkvWithID:[NSString stringWithFormat:@"test-%d",num] cryptKey:nil relativePath:nil];
-                    NSLog(@"==============================换文件成功");
-                    
-                } else {
+//                if (![self.mm canAppendData:data]) {
+//                    NSLog(@"==============================需要换文件");
+//                    [self.mm close];
+//                    self.mm = nil;
+//                    self.mm = [MMKV mmkvWithID:[NSString stringWithFormat:@"test-%d",num] cryptKey:nil relativePath:nil];
+//                    NSLog(@"==============================换文件成功");
+//
+//                } else {
                     [self.mm appendData:data];
                     NSLog(@"writdata: mm的size %lu %lu",self.mm.totalSize,self.mm.actualSize);
-                }
+//                }
                 num ++;
             }
         });
@@ -95,12 +97,12 @@ CGFloat LogTimeBlock (void (^block)(void)) {
     [[NSFileManager defaultManager] createDirectoryAtPath:rootDir withIntermediateDirectories:YES attributes:nil error:nil];
     dispatch_async(queue, ^{
         CGFloat time = LogTimeBlock(^{
-            for (int i = 0; i<1000; i++) {
+            for (int i = 0; i<10000; i++) {
                 
                 NSData *data = [[NSString stringWithFormat:@"hello World  lognum == %d",i] dataUsingEncoding:NSUTF8StringEncoding];
                 
                 [m_cachePool appendData:data];
-                if (m_cachePool.length > 1024*4) {
+                if (m_cachePool.length > 1024*10) {
                     if ([m_cachePool writeToFile:[rootDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%d.txt",i]] atomically:YES]){
                         [m_cachePool resetBytesInRange:NSMakeRange(0, m_cachePool.length)];
                         m_cachePool.length = 0;

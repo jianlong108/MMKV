@@ -71,7 +71,7 @@ int DEFAULT_MMAP_SIZE;
 		g_instanceDic = [NSMutableDictionary dictionary];
 		g_instanceLock = [[NSRecursiveLock alloc] init];
 
-		DEFAULT_MMAP_SIZE = getpagesize() * 2;
+		DEFAULT_MMAP_SIZE = getpagesize() * 20;
 		NSLog(@"pagesize:%d", DEFAULT_MMAP_SIZE);
 	}
 }
@@ -607,18 +607,18 @@ int DEFAULT_MMAP_SIZE;
 	if (m_elementNum == 0) {
 		newSize += ItemSizeHolderSize;
 	}
-    if (newSize >= m_output->spaceLeft()) return NO;
-	if (/*newSize >= m_output->spaceLeft() ||*/ m_elementNum == 0) {
+//    if (newSize >= m_output->spaceLeft()) return NO;
+	if (newSize >= m_output->spaceLeft() || m_elementNum == 0) {
 		// try a full rewrite to make space
 		static const int offset = pbDoubleSize(0);
         //优化
         NSData *data = [MiniPBCoder encodeDataWithObject:m_arr];
-//        size_t lenNeeded = data.length + offset + newSize;
-//        size_t avgItemSize = lenNeeded / std::max<size_t>(1, m_arr.count);
-//        size_t futureUsage = avgItemSize * std::max<size_t>(8, m_arr.count / 2);
+        size_t lenNeeded = data.length + offset + newSize;
+        size_t avgItemSize = lenNeeded / std::max<size_t>(1, m_arr.count);
+        size_t futureUsage = avgItemSize * std::max<size_t>(8, m_arr.count / 2);
 		// 1. no space for a full rewrite, double it
 		// 2. or space is not large enough for future usage, double it to avoid frequently full rewrite
-        /*
+       
 		if (lenNeeded >= m_size || (lenNeeded + futureUsage) >= m_size) {
 			size_t oldSize = m_size;
 			do {
@@ -633,7 +633,7 @@ int DEFAULT_MMAP_SIZE;
 				m_size = oldSize;
 				return NO;
 			}
-
+            NSLog(@"扩容成功 %zu",m_size);
 			if (munmap(m_ptr, oldSize) != 0) {
 				NSLog(@"fail to munmap [%@], %s", m_mmapID, strerror(errno));
 			}
@@ -652,7 +652,7 @@ int DEFAULT_MMAP_SIZE;
 			m_output = new MiniCodedOutputData(m_ptr + offset, m_size - offset);
 			m_output->seek(m_actualSize);
 		}
-*/
+
 		if ([self writeActualSize:data.length] == NO) {
 			return NO;
 		}
@@ -813,7 +813,7 @@ int DEFAULT_MMAP_SIZE;
 		} else {
 			// ensureMemorySize will extend file & full rewrite, no need to write back again
             // 当前文件的容量不足时,就放弃读写
-//            return [self ensureMemorySize:allData.length + offset - m_size];
+            return [self ensureMemorySize:allData.length + offset - m_size];
             return NO;
 		}
 	}
