@@ -125,12 +125,15 @@ void MiniCodedOutputData::writeRawData(NSData *value, int32_t offset, int32_t le
 	}
 }
 
+//存储 数据size
 void MiniCodedOutputData::writeRawVarint32(int32_t value) {
 	while (YES) {
-		if ((value & ~0x7f) == 0) {
+		if ((value & ~0x7f) == 0) { //value的二进制 8到31位全是0
 			this->writeRawByte(value);
 			return;
 		} else {
+            //(value & 0x7f) 获取0到7位
+            //(value & 0x7f) | 0x80 获取value 前八位的值
 			this->writeRawByte((value & 0x7f) | 0x80);
 			value = logicalRightShift32(value, 7);
 		}
@@ -149,14 +152,14 @@ void MiniCodedOutputData::writeRawVarint64(int64_t value) {
 	}
 }
 
-//将一个int_32以小端格式写进m_ptr中
+//将一个int_32以小端格式写进m_ptr中 //4个字节
 void MiniCodedOutputData::writeRawLittleEndian32(int32_t value) {
 	this->writeRawByte((value) &0xff);
 	this->writeRawByte((value >> 8) & 0xff);
 	this->writeRawByte((value >> 16) & 0xff);
 	this->writeRawByte((value >> 24) & 0xff);
 }
-
+// 8个字节 每个字节为一个单元 转换后写入
 void MiniCodedOutputData::writeRawLittleEndian64(int64_t value) {
 	this->writeRawByte((int32_t)(value) &0xff);
 	this->writeRawByte((int32_t)(value >> 8) & 0xff);
